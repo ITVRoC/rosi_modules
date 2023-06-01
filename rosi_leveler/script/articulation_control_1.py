@@ -6,10 +6,8 @@ It sends as the output control signal the linear velocity on v_z_Pi, on the flip
 '''
 import rospy
 
-from rosi_common.msg import TwistStamped, DualQuaternionStamped
+from rosi_common.msg import Float32Array
 from sensor_msgs.msg import Imu, JointState
-from std_msgs.msg import Float32MultiArray, MultiArrayDimension, MultiArrayLayout
-
 
 import numpy as np
 import quaternion
@@ -86,7 +84,7 @@ class NodeClass():
         ##==== ROS interfaces
 
         # publishers
-        self.pub_cmdVelFlipperSpace = rospy.Publisher('/rosi/flippers/space/cmd_v_z', Float32MultiArray, queue_size=5)
+        self.pub_cmdVelFlipperSpace = rospy.Publisher('/rosi/flippers/space/cmd_v_z/leveler', Float32Array, queue_size=5)
         #self.pub_imuCtrlSig = rospy.Publisher('/rosi/base/space/cmd_vel/ctrl_signal', TwistStamped, queue_size=5)
         #self.pub_dqError = rospy.Publisher('/rosi/base/pose_reg/dq_error', DualQuaternionStamped, queue_size=5)
         #self.pub_dqSetPoint = rospy.Publisher('/rosi/base/pose_reg/set_point', DualQuaternionStamped, queue_size=5)
@@ -149,7 +147,10 @@ class NodeClass():
                     ##=== Generating rotational control signal
 
                     # computing rotational velocity control signal (aroung x, y, and z base axis)
-                    ctrlSig_rot = np.multiply(self.kp_u, [0] + np.multiply(-1, q_e.components[1:3]).tolist() )# puts a zero to the p_z component, which is not controlled in this control mode
+                    ctrlSig_rot = np.multiply(self.kp_u, np.multiply(-1, q_e.components[1:3]).tolist() + [0] )# puts a zero to the p_z component, which is not controlled in this control mode
+
+                    print('---')
+                    print(ctrlSig_rot)
 
                     # applyes the dead band to the rotational control signal  (controller do not correct if it is below a threshold)
                     ctrlSig_rot_db = [cmd if abs(cmd) >= self.deadBand_rot else 0.0 for cmd in ctrlSig_rot]
@@ -190,10 +191,10 @@ class NodeClass():
                     u2 = np.dot(  np.eye(4) - np.dot(self.J_art_dagger, np.linalg.pinv(self.J_art_dagger)), np.array(f_mu).reshape(4,1) )
                     u_l = u1+u2
 
-                    """print('----')
-                    print(u1)
-                    print(u2)
-                    print(u)"""
+                    #print('----')
+                    #print(u1)
+                    #print(u2)
+                    #print(u_l)
 
                     ## === PUBLISHING THE CONTROL SIGNAL
                     # receiving ROS time
@@ -205,12 +206,11 @@ class NodeClass():
                     ##=== Publishing the control command signal
                     
                     # publishing message
-                    m = Float32MultiArray()
+                    m = Float32Array()
+                    m.header.stamp = ros_time
+                    m.header.frame_id = self.node_name
                     m.data = [aux[0] for aux in u_l]
-                    m.layout = MultiArrayLayout()
-                    m.layout.dim = [MultiArrayDimension(key, 1, 0) for key in ['v_z_P1', 'v_z_P2', 'v_z_P3', 'v_z_P4'] ]
-                    self.pub_cmdVelFlipperSpace.publish(m)
-                    
+                    self.pub_cmdVelFlipperSpace.publish(m)                 
 
 
                     """m = Vector3ArrayStamped()

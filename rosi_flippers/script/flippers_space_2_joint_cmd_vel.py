@@ -62,7 +62,7 @@ class NodeClass():
         self.pub_cmdVelFlpJnt = rospy.Publisher('/rosi/flippers/joint/cmd_vel/leveler', Float32Array)
 
         # subscribers
-        sub_cmdVel_cmdVelVzPi = rospy.Subscriber('/rosi/flippers/space/cmd_v_z', Float32MultiArray, self.cllbck_cmdVelVzPi)
+        sub_cmdVel_cmdVelVzPi = rospy.Subscriber('/rosi/flippers/space/cmd_v_z', Float32Array, self.cllbck_cmdVelVzPi)
 
         #sub_cmdVelFlpSpace = rospy.Subscriber('/rosi/flippers/space/cmd_vel', Vector3ArrayStamped, self.cllbck_cmdVelFlpSpace)
         sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)

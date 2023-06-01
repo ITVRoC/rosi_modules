@@ -8,16 +8,13 @@ import rospy
 
 import numpy as np
 
-from std_msgs.msg import Float32MultiArray, MultiArrayDimension, MultiArrayLayout
-from rosi_common.msg import Vector3ArrayStamped, TwistStamped
+from rosi_common.msg import TwistStamped, Float32Array
 
 from rosi_common.srv import SetNodeStatus, GetNodeStatusList
 
 from rosi_model.rosi_description import tr_base_piFlp
-
 from rosi_common.node_status_tools import nodeStatus
 from rosi_common.rosi_tools import compute_J_art_dagger
-
 
 
 class NodeClass():
@@ -38,7 +35,7 @@ class NodeClass():
 
         ##=== ROS interfaces
         # publishers 
-        self.pub_cmdVelFlipperSpace = rospy.Publisher('/rosi/flippers/space/cmd_v_z', Float32MultiArray, queue_size=5)
+        self.pub_cmdVelFlipperSpace = rospy.Publisher('/rosi/flippers/space/cmd_v_z/joy', Float32Array, queue_size=5)
 
         # subscriber
         sub_baseCmdVel = rospy.Subscriber('/rosi/base/space/cmd_vel', TwistStamped, self.cllbck_baseCmdVel) # base frame cmd vel input
@@ -79,10 +76,10 @@ class NodeClass():
                     v_z_Pi_out = self.J_art_dagger.dot(v_art_R_in)
 
                     # publishing message
-                    m = Float32MultiArray()
+                    m = Float32Array()
+                    m.header.stamp = rospy.get_rostime()
+                    m.header.frame_id = self.node_name
                     m.data = [x[0] for x in v_z_Pi_out]
-                    m.layout = MultiArrayLayout()
-                    m.layout.dim = [MultiArrayDimension(key, 1, 0) for key in ['v_z_P1', 'v_z_P2', 'v_z_P3', 'v_z_P4'] ]
                     self.pub_cmdVelFlipperSpace.publish(m)
             
 
