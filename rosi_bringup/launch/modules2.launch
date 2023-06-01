@@ -55,7 +55,7 @@
 
     <!-- This parameter sets ROSI forward side. As Falcao says, it has Lado A, Lado B, Lado B, Lado A-->
     <!-- Set it to "a" or "b" -->
-    <param name='/rosi/forward_side' type="string" value="az" />
+    <param name='/rosi/forward_side' type="string" value="a" />
 
 
     <!-- Loads other ROSI parameters -->

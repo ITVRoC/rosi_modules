@@ -69,8 +69,8 @@ class NodeClass():
             v_lin_y = 0.0   # base non-holonomic restriction unables base to generate y_{R} sense's movement
             v_lin_z = ((msg.axes[2] - msg.axes[5])/2) * self.p_max_lin_speed['z']
 
-            v_ang_x = msg.axes[3] * self.p_max_ang_speed['x'] 
-            v_ang_y = -msg.axes[4] * self.p_max_ang_speed['y'] 
+            v_ang_x = -msg.axes[3] * self.p_max_ang_speed['x'] 
+            v_ang_y = msg.axes[4] * self.p_max_ang_speed['y'] 
             v_ang_z = msg.axes[0] * self.p_max_ang_speed['z'] 
 
             # mount message to publish
