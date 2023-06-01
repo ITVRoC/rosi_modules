@@ -32,7 +32,7 @@
     <node name="rosi_to_flippers_cmd_vel" pkg="rosi_flippers" type="rosi_to_flippers_cmd_vel.py" respawn="true" />
 
     <!-- running the rosi_flippers flippers_space_2_joint_cmd_vel node -->
-    <!-- node name="flippers_cmd_v_z_sum" pkg="rosi_flippers" type="flippers_cmd_v_z_sum.py" respawn="true" / -->
+    <node name="flippers_cmd_v_z_sum" pkg="rosi_flippers" type="flippers_cmd_v_z_sum.py" respawn="true" />
 
     <!-- running the rosi_flippers flippers_space_2_joint_cmd_vel node -->
     <node name="flippers_space_2_joint_cmd_vel" pkg="rosi_flippers" type="flippers_space_2_joint_cmd_vel.py" respawn="true" />

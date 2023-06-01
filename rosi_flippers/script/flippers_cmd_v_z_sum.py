@@ -80,7 +80,7 @@ class NodeClass():
                 m.header.frame_id = self.node_name
                 m.data = cmd_v_z_sum
                 self.pub_cmdVel_cmdVelVzPi.publish(m)
-                print(m)
+                #print(m)
 
 
     def cllbck_cmdVelVzPi_joy(self, msg): 
