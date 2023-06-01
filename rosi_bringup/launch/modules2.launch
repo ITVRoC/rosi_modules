@@ -1,0 +1,170 @@
+<launch>
+
+	<!--====================================================== -->
+	<!-- ===== LAUNCH PARAMETERS ==== -->
+	<!--====================================================== -->
+
+    <!-- For choosing when to ROSI control nodes -->
+    <!-- possible values are "true", "false"-->
+    <arg name="rosi_nodes" default="true" />
+
+    <!-- For choosing when to launch xsens module -->
+    <!-- possible values are "true", "false"-->
+    <arg name="xsens_mode" default="false" />
+
+    <!-- For choosing when to launch joystick module -->
+    <!-- possible values are "true", "false"-->
+    <arg name="joy_mode" default="true" />
+
+    <!-- For choosing when to launch rviz display modules -->
+    <!-- possible values are "true", "false"-->
+    <arg name="rviz_disp" default="false" />
+
+    <!-- For enabling kinova gen3 driver -->
+    <!-- possible values are "true", "false"-->
+    <arg name="kinova_gen3_driver" default="false" />
+
+    <!-- For enabling kinova gen3 TCP rgb point-cloud -->
+    <!-- possible values are "true", "false"-->
+    <arg name="kinova_gen3_pcl" default="false" />
+
+    <!-- For enabling velodyne driver -->
+    <!-- possible values are "true", "false"-->
+    <arg name="velodyne" default="false" />
+    
+     <!-- For choosing when to launch Intel realsense module -->
+    <!-- possible values are "true", "false"-->
+    <arg name="realsense_mode" default="false" />
+
+    <!-- For choosing when to launch Arduino ROS serial for light leds -->
+    <!-- possible values are "true", "false"-->
+    <arg name="led_lights" default="false" />
+
+    <!-- For choosing when to launch RTSP nodes for recording camera videos -->
+    <!-- possible values are "true", "false"-->
+    <arg name="rtsp" default="false" />
+
+    <!-- For enabling rosbridge (used in Bidonix interface) -->
+    <!-- possible values are "true", "false"-->
+    <arg name="flag_rosbridge" default="false" />
+
+
+    <!--====================================================== -->
+	<!-- ===== ROBOT OPERATION PARAMETERS TO ROS PARAM SERVER ==== -->
+	<!--====================================================== -->
+
+    <!-- This parameter sets ROSI forward side. As Falcao says, it has Lado A, Lado B, Lado B, Lado A-->
+    <!-- Set it to "a" or "b" -->
+    <param name='/rosi/forward_side' type="string" value="az" />
+
+
+    <!-- Loads other ROSI parameters -->
+    <rosparam command="load" ns="rosi_model" file="$(find rosi_model)/config/params.yaml" />
+
+
+    <!--====================================================== -->
+    <!-- ===== LAUNCHING NODES=====  -->
+    <!--====================================================== -->
+
+    <!-- setting needed ROS params-->
+    <!-- param name="/rosi/op_mode" type="str" value="$(eval arg('rosi_mode'))" / -->
+
+    <!-- ROSI BASE NODES-->
+    <group if="$(arg rosi_nodes)">
+        <include file="$(find rosi_bringup)/launch/sublaunches/full_rosi_base_nodes.launch" pass_all_args="true" />
+    </group>
+
+
+    <!-- ===== XSENS MODULE ===== -->
+	<!-- Launching xsens -->
+    <group if="$(arg xsens_mode)">
+        <include file="$(find xsens_driver)/launch/xsens.launch" pass_all_args="true"  />
+    </group>
+
+
+    <!-- ===== REALSENSE MODULE ===== -->
+    <!-- real-sense -->
+    <group if="$(arg realsense_mode)">
+        <include file="$(find realsense2_camera)/launch/rs_camera.launch" pass_all_args="true" />
+    </group>
+
+
+    <!-- ===== VELODYNE MODULE ===== -->
+    <!-- real-sense -->
+    <group if="$(arg velodyne)">
+        <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" pass_all_args="true" />
+    </group>
+
+
+    <!-- ===== JOY MODULE ===== -->
+    <!-- joy node -->
+    <group if="$(arg joy_mode)">
+        <node name="joy_node" pkg="joy" type="joy_node" respawn="true" >
+            <param name="deadzone" value="0.25" />
+            <param name="autorepeat_rate" value="4" />
+            <param name="coalesce_interval" value="0.05" />
+            <param name="default_trig_val" value = "True" />
+        </node>
+    </group>
+
+
+    <!-- ===== RVIZ display ===== -->
+    <!-- real-sense -->
+    <group if="$(arg rviz_disp)">
+        <include file="$(find rosi_bringup)/launch/sublaunches/rviz_disp.launch" pass_all_args="true" />
+    </group>
+
+
+    <!-- ===== KINOVA GEN3 driver ===== -->
+     <!-- Kinova Gen3 driver -->
+    <group if="$(arg kinova_gen3_driver)">
+        <include file="$(find kortex_driver)/launch/kortex_arm_driver.launch" pass_all_args="true" />
+    </group>
+
+
+    <!-- Kinova Gen3 TCP rgb point cloud -->
+    <group if="$(arg kinova_gen3_pcl)">
+        <include file="$(find kinova_vision)/launch/kinova_vision_depth_only.launch" pass_all_args="true"  />
+    </group>
+
+
+
+    <!-- No inicializador do ROS no Arduino para os leds -->
+    <group if="$(arg led_lights)">
+        <node name="serial_node" pkg="rosserial_python" type="serial_node.py" respawn="true" >
+            <param name="port" type="string" value="/dev/input/arduino_rosi" />
+        </node>
+        <!-- running the base_ground_distance_from_contact_point flippers_safety node -->
+        <node name="joy_led_lights" pkg="rosi_joy" type="joy_led_lights.py" respawn="true" />
+    </group>
+
+
+    <!-- No inicializador do RTSP para gravacao de imagem das cameras -->
+    <group if="$(arg rtsp)">
+        <arg name="group_name" default="store_video" />
+        <group ns="$(arg group_name)">
+            <node pkg="ros_service_store_rtsp" type="store_rtsp_service.py" name="store_rtsp_service" output="screen">
+                <param name="base_output_path" value="$(find ros_service_store_rtsp)/stored_streams" />
+                <!--<param name="base_output_path" value="/tmp/stored_streams" />-->
+                <param name="extension" value=".mkv" />
+                <param name="acodec" value="" /> <!-- leave empty or do not set this param to disable audio -->
+                <param name="vcodec" value="copy" />
+                <param name="fps" value="15" />
+                <param name="video_bitrate" value="900k" />
+                <param name="publish_screenshots" value="false"/>
+                <param name="publish_screenshots_rate_seconds" value="2"/> <!-- cannot be less than 1, value in seconds -->
+                <param name="segment_time" value="300"/>
+                <param name="segment_format" value="matroska"/>
+            </node>
+        </group>
+    </group>
+
+
+    <!-- ===== ROS BRIDGE ===== -->
+    <group if="$(arg flag_rosbridge)">
+        <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" pass_all_args="true" />
+    </group>
+
+</launch>
+
+

@@ -1,0 +1,3 @@
+primary_sprocket_radius: 0.071 # flipper primary track sprocket radius in meters
+secondary_sprocket_radius: 0.0635 # flipper secondary track sprocket radius in meters
+dist_primary2secondary_sprockets: 0.3832 # distance in meters from the primary sprocket center to the secondary sprocket center 

@@ -1,0 +1,28 @@
+<launch>
+
+    <!-- For choosing which rosi mode to run -->
+    <!-- possible values are "manual_flp_joint_space", "manual_flp_op_space", "attitude_reg", "pose_reg" -->
+    <arg name="rosi_mode" default="manual_flp_op_space" />
+
+
+    <!-- BELOW ARE CONDITIONAL ROSI OPERATION MODES -->
+
+    <!-- rosi manual flp joint spce -->
+    <include file="$(find rosi_bringup)/launch/rosi_joy_base_flippers_joint_space.launch" pass_all_args="true" 
+        if="$(eval arg('rosi_mode') == 'manual_flp_joint_space')"/>
+
+    <!-- rosi manual flp operational spce -->
+    <include file="$(find rosi_bringup)/launch/rosi_joy_base_flippers_op_space.launch" pass_all_args="true" 
+        if="$(eval arg('rosi_mode') == 'manual_flp_op_space')"/>
+
+    <!-- rosi automatic attitude reg -->
+    <include file="$(find rosi_bringup)/launch/rosi_joy_traction_flippers_attitude_reg.launch" pass_all_args="true" 
+        if="$(eval arg('rosi_mode') == 'attitude_reg')"/>
+
+    <!-- rosi automatic pose reg -->
+    <include file="$(find rosi_bringup)/launch/rosi_joy_traction_flippers_pose_reg.launch" pass_all_args="true" 
+        if="$(eval arg('rosi_mode') == 'pose_reg')"/>
+
+   
+
+</launch>

@@ -1,0 +1,6 @@
+<launch>
+
+    <!-- rosi controller -->
+    <include file="$(find rosi_controller)/launch/rosi_controller_core_stripped.launch" pass_all_args="true" />
+
+</launch>

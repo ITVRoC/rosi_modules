@@ -1,0 +1,4 @@
+uint32  req_mode
+---
+bool    ok
+uint32  current_mode

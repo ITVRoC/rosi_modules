@@ -1,0 +1,11 @@
+<launch>
+
+
+    <!-- rosi controller -->
+    <include file="$(find rosi_controller)/launch/rosi_controller_core_stripped_xsens.launch" pass_all_args="true" />
+
+    <!-- real-sense -->
+    <include file="$(find realsense2_camera)/launch/rs_camera.launch" pass_all_args="true" />
+   
+
+</launch>

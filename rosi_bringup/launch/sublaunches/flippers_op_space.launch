@@ -1,0 +1,48 @@
+<launch>
+
+    <!-- running the rosi mind node -->
+    <node name="controller_cmd_req" pkg="rosi_common" type="controller_cmd_req.py" respawn="true" />
+
+    <!-- running the rosi_joy joy_base_cmdVel node -->
+    <node name="joy_base_cmdVel" pkg="rosi_joy" type="joy_base_cmdVel.py" respawn="true" />
+
+    <!-- running the base_cmdVel_sum rosi_space_to_traction_cmd_vel node -->
+    <node name="base_cmd_vel_sum" pkg="rosi_base" type="base_cmd_vel_sum.py" respawn="true" />
+
+    <!-- running the rosi_to_flippers_cmd_vel rosi_to_flippers_cmd_vel node -->
+    <node name="rosi_to_flippers_cmd_vel" pkg="rosi_flippers" type="rosi_to_flippers_cmd_vel.py" respawn="true" />
+
+    <!-- running the rosi_flippers flippers_space_2_joint_cmd_vel node -->
+    <node name="flippers_space_2_joint_cmd_vel" pkg="rosi_flippers" type="flippers_space_2_joint_cmd_vel.py" respawn="true" />
+
+    <!-- running the flippers_ground_touch_state rosi_space_to_traction_cmd_vel node -->
+    <node name="flippers_ground_touch_state" pkg="rosi_flippers" type="flippers_ground_touch_state.py" respawn="true" />
+
+    <!-- running the rosi_flippers flippers_touch_granter node -->
+    <node name="flippers_touch_granter" pkg="rosi_flippers" type="flippers_touch_granter.py" respawn="true" />
+
+    <!-- running the rosi_flippers flippers_cmd_sum node -->
+    <node name="flippers_cmd_sum" pkg="rosi_flippers" type="flippers_cmd_sum.py" respawn="true" />
+
+    <!-- running the rosi_flippers flippers_safety node -->
+    <node name="flippers_safety" pkg="rosi_flippers" type="flippers_safety.py" respawn="true" />
+
+    <!-- running the rosi_to_traction_cmd_vel rosi_space_to_traction_cmd_vel node -->
+    <node name="rosi_to_traction_cmd_vel" pkg="rosi_traction" type="rosi_to_traction_cmd_vel.py" respawn="true" />
+
+    <!-- running the traction_space_2_joint_cmd_vel rosi_space_to_traction_cmd_vel node -->
+    <node name="traction_space_2_joint_cmd_vel" pkg="rosi_traction" type="traction_space_2_joint_cmd_vel.py" respawn="true" />
+
+    <!-- running the rosi_traction traction_flipper_risal_compensator node -->
+    <node name="traction_flipper_risal_compensator" pkg="rosi_traction" type="traction_flipper_risal_compensator.py" respawn="true" />
+
+    <!-- running the rosi_traction traction_cmd_sum node -->
+    <node name="traction_cmd_sum" pkg="rosi_traction" type="traction_cmd_sum.py" respawn="true" />
+
+    <!-- running the ground_contact_point_wrt_base flippers_safety node -->
+    <node name="ground_contact_point_wrt_base" pkg="rosi_model" type="ground_contact_point_wrt_base.py" respawn="true" />
+
+    <!-- running the base_ground_distance_from_contact_point flippers_safety node -->
+    <node name="base_ground_distance_from_contact_point" pkg="rosi_model" type="base_ground_distance_from_contact_point.py" respawn="true" />
+
+</launch>

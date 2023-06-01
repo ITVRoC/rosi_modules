@@ -1,0 +1,5 @@
+# sets the pose set point considering a 3D translation vector and euler angles around XYZ
+float32[3] translation
+float32[3] orientation
+---
+bool return_status

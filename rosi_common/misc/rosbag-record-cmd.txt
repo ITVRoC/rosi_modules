@@ -1,0 +1,4 @@
+
+
+
+rosbag record /mti/sensor/imu /joy /rosi/rosi_controller/joint_state /rosi/rosi_controller/input /rosi/base/space/cmd_vel/joy /rosi/base/pose_reg/dq_error /rosi/base/pose_reg/set_point /rosi/base/space/cmd_vel/ctrl_signal /rosi/model/contact_point_wrt_base /rosi/model/grav_vec_wrt_frame_r /rosi/model/base_ground_distance /rosi/base/space/cmd_vel /rosi/flippers/space/cmd_vel /rosi/flippers/joint/cmd_vel/leveler /rosi/flippers/status/touching_ground /rosi/flippers/joint/cmd_vel/touch_granter /rosi/flippers/joint/cmd_vel/sum /rosi/flippers/status/safety/max_pos_lock /rosi/controller/req_cmd /rosi/traction/space/cmd_vel /rosi/traction/joint/cmd_vel/navigation /rosi/traction/joint/cmd_vel/compensator /camera/color/image_raw/compressed /rosi/traction/joint/cmd_vel/compensator /rosi/base/pose /rosi/base/pose_reg/ctrl_gain 
