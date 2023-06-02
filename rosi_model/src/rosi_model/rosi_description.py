@@ -133,11 +133,12 @@ dq_qi_flpContactElbow = {
 ##=== Wheels contact point w.r.t. Pi frame 
 '''translation vector of wheel contact point w.r.t. propeller Pi frame'''
 tr_pi_wheelContact = {
-    'fl': np.array([-0.13201, 0.0, -0.0573]).reshape(3,1),
-    'fr': np.array([-0.13201, 0.0, -0.0573]).reshape(3,1),
-    'rl': np.array([-0.13201, 0.0, -0.0573]).reshape(3,1),
-    'rr': np.array([-0.13201, 0.0, -0.0573]).reshape(3,1)
+    'fl': np.array([0, 0, -0.13201]).reshape(3,1),
+    'fr': np.array([0, 0, -0.13201]).reshape(3,1),
+    'rl': np.array([0, 0, -0.13201]).reshape(3,1),
+    'rr': np.array([0, 0, -0.13201]).reshape(3,1)
 }
+
 
 ''' dual-quaternion of wheel contact point w.r.t. propeller Pi frame'''
 dq_pi_wheelContact = {

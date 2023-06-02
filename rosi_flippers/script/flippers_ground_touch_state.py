@@ -26,7 +26,7 @@ class NodeClass():
         self.torqueThreshold = 0 # N.m
 
         # time window to state that no further message has been received
-        self.timeWindowToDiscard = rospy.Duration.from_sec(1)
+        self.timeWindowToDiscard = rospy.Duration.from_sec(0.3)
 
         ##=== Useful variables
         # node status object
@@ -85,6 +85,7 @@ class NodeClass():
                     self.dt = time_current - self.time_last
                 self.time_last = time_current
 
+                print(self.flpMsg)
 
                 # using received message to compute flippers state
                 if self.flpMsg == None: # it means no message has been received

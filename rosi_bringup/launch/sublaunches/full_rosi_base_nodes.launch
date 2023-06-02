@@ -8,10 +8,10 @@
 
     <!-- running the pose_reg_base_cmd_vel rosi_space_to_traction_cmd_vel node -->
     <!-- node name="pose_reg_base_cmd_vel" pkg="rosi_leveler" type="pose_reg_base_cmd_vel.py" respawn="true" / -->
-    <node name="articulation_control_1" pkg="rosi_leveler" type="articulation_control_1.py" respawn="true" />
+    <node name="articulation_control_null_space" pkg="rosi_leveler" type="articulation_control_null_space.py" respawn="true" />
 
     <!-- running the ground_contact_point_wrt_base flippers_safety node -->
-    <node name="ground_contact_point_wrt_base" pkg="rosi_model" type="ground_contact_point_wrt_base.py" respawn="true" />
+    <!-- node name="ground_contact_point_wrt_base" pkg="rosi_model" type="ground_contact_point_wrt_base.py" respawn="true" / -->
 
     <!-- running the base_ground_distance_from_contact_point flippers_safety node -->
     <node name="base_ground_distance_from_contact_point" pkg="rosi_model" type="base_ground_distance_from_contact_point.py" respawn="true" />

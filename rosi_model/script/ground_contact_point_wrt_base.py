@@ -21,7 +21,6 @@ from rosi_common.srv import SetNodeStatus, GetNodeStatusList
 import numpy as np
 import quaternion
 
-
 class NodeClass():
 
     def __init__(self, node_name):
@@ -46,7 +45,7 @@ class NodeClass():
         ##=== Dimensional auxiliary variables
 
         # vector from primary sprocket to the secondary
-        self.dim_v_q_distSprockets = (np.array([1,0,0]) * self.p_dist_sprockets).reshape(3,1) # the secondary sprocket is aligned to the primary by the x_Qi vector (1,0,0)
+        self.dim_v_q_distSprockets = (np.array([0,0,1]) * self.p_dist_sprockets).reshape(3,1) # the secondary sprocket is aligned to the primary by the x_Qi vector (1,0,0)
 
         # an standard x vector
         self.v_x = np.array([1,0,0]).reshape(3,1)
@@ -85,37 +84,41 @@ class NodeClass():
 
             if self.ns.getNodeStatus()['active']: # only runs if node is active
 
-                if self.flpJointState is not None and self.flpTouchState is not None and self.msg_imu  is not None:  # only runs if messages have been received
+                 # only runs if messages have been received
+                if self.flpJointState is not None and self.flpTouchState is not None and self.msg_imu  is not None: 
                     if self.flpTouchState.data[0] != -1: # only runs if the touch state node is sending valid values
 
-                        #finding the gravity vector w.r.t. {Qi} frame
+                        #finding the gravity vector w.r.t. {R} frame
                         q_w_r = np.quaternion(self.msg_imu.orientation.w, self.msg_imu.orientation.x, self.msg_imu.orientation.y, self.msg_imu.orientation.z) # finding the {R} orientation wrt {W}                        
                         q_r_g = q_w_r.conj() * self.q_g_def * q_w_r     # gravity vector w.r.t. {R}
                         # TODO publicar o vetor de velocidade
                         
                         # extracting flippers needed data
-                        _,joint_state = jointStateData2dict(self.flpJointState)
-                        flp_pos = correctFlippersJointSignal(joint_state['pos'])    # this time, wee need flippers joint position accordingly real joints (i.e., no tweak for positive angles for flippers extended)
+                        _, flp_data = jointStateData2dict(self.flpJointState)
+                        flp_pos = [x*y for x,y in zip(flp_data['pos'], [1, 1, -1, -1])] # correcting joints pos signal from real axis value to the modeled concept (which considers all propulsion frames alined wrt {R})
+
+
+                        # flipper ground touch data
                         flp_touch = self.flpTouchState.data
 
                         # numpy vector array with accumulating contact points
-                        cp = []
+                        cp_l = []
 
                         # computing contact point w.r.t. frame Pi
                         for key, touch, jointPos in zip(propKeys, flp_touch, flp_pos):  # iterates for all four propellants
 
                             if touch == 0:  # when wheel is touching the ground 
-                                cp.append(dq_pi_wheelContact[key])
+                                cp_l.append(dq_pi_wheelContact[key])
 
                             else: # when flipper is touching the ground
 
                                 # dual-quaternion of frame Qi w.r.t. Pi (its a rotation around z of the flipper joint value)
-                                dq_pi_qi = angleAxis2dqRot(jointPos, [0,0,1]) # rotation between Pi and Qi is always about z axis
+                                dq_pi_qi = angleAxis2dqRot(jointPos, [0,1,0]) # rotation between Pi and Qi is always about y axis
 
                                 #-- first flipper contact point candidate: elbow
                                 # changing representation of elbow contact point from Qi to Pi
-                                dq_qi_cp_elbow = dq_pi_qi * dq_qi_flpContactElbow[key]
-                                v_pi_cp1 = dqExtractTransV3(dq_qi_cp_elbow)
+                                dq_pi_cp_elbow = dq_pi_qi * dq_qi_flpContactElbow[key]
+                                v_pi_cp1 = dqExtractTransV3(dq_pi_cp_elbow)
 
 
                                 #-- second flipper contact point candidate: tip
@@ -125,14 +128,17 @@ class NodeClass():
                                 q_qi_g = q_pi_qi.conj() * q_pi_g * q_pi_qi      # expressing gravitational vector in the {Qi} frame
                                 v_qi_g = quat2tr(q_qi_g)
 
-                                # computing the vector from Qi to the second contact point candidate
-                                aux_v_g = np.array([v_qi_g[0], v_qi_g[1], 0])   # projecting the gravitational vector onto x,y_Qi axes
-                                v_g_spr_hat = (aux_v_g/np.linalg.norm(aux_v_g)).reshape(3,1)   # normalizing the vector
-                                v_qi_cp2 = self.dim_v_q_distSprockets + v_g_spr_hat*self.p_secondarySprocket_radius # summing the vectors from {Qi} to the contact point considering the gravitational vector on the second sprocket
+                                # computing the gravitational vector projection in the xz plane of {Qi{}}
+                                v_qi_g_projxz = np.array([v_qi_g[0], 0, v_qi_g[2]]).reshape(3,1)  # the projection of the gravitational vector in the xz plane of {Qi}
+                                v_qi_g_projxz = (v_qi_g_projxz / np.linalg.norm(v_qi_g_projxz))  # normalizing the projected vector
 
-                                # expressing the second contact point candidate in {Pi} frame
-                                v_pi_cp2 = np.dot(dqExtractRotM(dq_pi_qi), v_qi_cp2)                                
+                                # computing the secondary contact candidate point wrt {Qi}
+                                v_qi_cp2 = self.dim_v_q_distSprockets + v_qi_g_projxz*self.p_secondarySprocket_radius # summing the vectors from {Qi} to the contact point considering the gravitational vector on the second sprocket
 
+                                # expressing the second candidate in pi frame
+                                dq_pi_cp2 = dq_pi_qi * tr2dq(v_qi_cp2)
+                                v_pi_cp2 = dqExtractTransV3(dq_pi_cp2)
+                           
                                 #-- deciding which candidate is the farthest from Pi along g vector
                                 # projects both candidates onto g vector
                                 v_pi_g = quat2tr(q_pi_g).reshape(3,1)
@@ -141,16 +147,16 @@ class NodeClass():
                                 
                                 # decides which has the smaller biggest norm (farthest from Pi along g vector)
                                 if proj_c1_g > proj_c2_g:
-                                    cp.append(tr2dq(v_pi_cp1))
+                                    cp_l.append(tr2dq(v_pi_cp1))
                                 else:
-                                    cp.append(tr2dq(v_pi_cp2))
+                                    cp_l.append(tr2dq(v_pi_cp2))
 
 
                         # transforming contact point w.r.t. Pi  to frame R 
-                        dq_base_cp = [base_pi * pi_cp for base_pi, pi_cp in zip(dq_base_piFlp.values(), cp)]
+                        dq_base_cp_l = [dq_base_pi * dq_pi_cp for dq_base_pi, dq_pi_cp in zip(dq_base_piFlp.values(), cp_l)]
 
                         # converting obtained dual-quaternions to position vectors
-                        p_base_cp = [dq.translation().vec3() for dq in dq_base_cp]
+                        p_base_cp_l = [dq.translation().vec3() for dq in dq_base_cp_l]
 
                         # receiving ros time
                         time_current = rospy.get_rostime()
@@ -159,7 +165,7 @@ class NodeClass():
                         m = Vector3ArrayStamped()
                         m.header.stamp = time_current
                         m.header.frame_id = self.node_name
-                        for v in p_base_cp:
+                        for v in p_base_cp_l:
                             m.vec.append(Vector3(x=v[0],y=v[1],z=v[2]))
                         self.pub_cntctPnt.publish(m)
 

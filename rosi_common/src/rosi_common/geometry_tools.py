@@ -64,4 +64,4 @@ def dist_point_to_plane_along_vector(pt, pl, v):
 
 def projectionV1toV2_norm(v1, v2):
     '''Return magnitude of the projection vector of v1 onto v2 '''
-    return np.dot(v1, v2)/np.linalg.norm(v2)
+    return (np.dot(v1, v2)/np.linalg.norm(v2))[0][0]

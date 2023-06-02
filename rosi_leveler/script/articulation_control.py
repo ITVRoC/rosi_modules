@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
 ''' This is a ROSI algorithm
-It receives imu input, a pose set-point , and provides and generates a 
-rosi base cmdVel ctrl signal in operational space to correct it
+It controls the body attitude by actively controlling the chassis orientation
+and using the height as an optimization parameter. 
+It sends as the output control signal the linear velocity on v_z_Pi, on the flipper's space
 '''
 import rospy
 
-from rosi_common.msg import TwistStamped, Vector3ArrayStamped, DualQuaternionStamped
-from sensor_msgs.msg import Imu
+from rosi_common.msg import Float32Array
+from sensor_msgs.msg import Imu, JointState
 
 import numpy as np
 import quaternion
 from dqrobotics import *
 
-from rosi_common.dq_tools import quat2rpy, rpy2quat, quatAssurePosW, trAndOri2dq, dq2rpy
+from rosi_common.dq_tools import quat2rpy, rpy2quat, quatAssurePosW, trAndOri2dq, quat2rpy, dq2rpy, dq2trAndQuatArray
 from rosi_common.dq_tools import *
 
+from rosi_common.rosi_tools import jointStateData2dict, correctFlippersJointSignal, compute_J_art_dagger
 from rosi_common.node_status_tools import nodeStatus
+
+from rosi_common.msg import Vector3ArrayStamped
 from rosi_common.srv import SetNodeStatus, GetNodeStatusList, setPoseSetPointVec, setPoseCtrlGain, getPoseCtrlGain, getPoseSetPointVec
+
+from rosi_model.rosi_description import dict_flprsPosLimits, tr_base_piFlp
 
 class NodeClass():
 
@@ -28,39 +34,29 @@ class NodeClass():
 
         #-----------------------------------------------
         # Pose set-point
-        sp_pos = [0, 0, 0.33]
-        sp_ori = rpy2quat(np.deg2rad([0, 0, 0]))
-        self.dq_sp = trAndOri2dq(sp_pos, sp_ori, 'trfirst')
+        self.sp_pos = [0, 0, 0.33]
+        auxq = rpy2quat(np.deg2rad([0, 0, 0]))
+        self.sp_ori = np.quaternion(auxq[0], auxq[1], auxq[2], auxq[3])
         #-----------------------------------------------
-
-        # corrective imu rotation
-        # TODO retirar talvez esta correcao de quaternion. Ela so eh necessaria quando a IMU esta instalada em orientacao errada
-        aux_imu_correct = rpy2quat(np.deg2rad([0, 0, 0]))
-        self.q_imu_correct = np.quaternion(aux_imu_correct[0], aux_imu_correct[1], aux_imu_correct[2], aux_imu_correct[3]) 
 
         # rotational controller kp for each dof [rol, pitch, yaw]
         #self.kp_rot = [3.5, 6.5, 0]
-        self.kp_rot = [2.0, 4.0, 0]
+        self.kp_u = [1.0, 2.0, 4.0]
+
+        # gain for the jacobian null space factor
+        self.kp_mu = 4*[0.01]
 
         # rotational dead-band (the controller do not correct if error is below this value)
         self.deadBand_rot = 0.01
 
-        # translational controller kp for each dof [x, y, z]
-        #self.kp_tr = [0, 0, 1.25]
-        self.kp_tr = [0, 0, 0.8]
-
-        # translational dead-band (the controller do not correct if error is below this value)
-        self.deadBand_tr = 0.01
-
         # rosi direction side
         self.drive_side_param_path = '/rosi/forward_side'
         self.drive_side = self.getParamWithWait(self.drive_side_param_path)
-
     
         ##=== Useful variables
         # node status object
         self.ns = nodeStatus(node_name)
-        self.ns.resetActive() # this node is disabled by default
+        #self.ns.resetActive() # this node is disabled by default
 
         # stores IMU current orientation
         self.q_ori = None
@@ -68,18 +64,39 @@ class NodeClass():
         # stores the robot base distance from the ground
         self.p_grnd = None
 
+        # ROSI joint states
+        self.flpJointState = None
+
+        # for storing joints and w function last values
+        self.last_jointPos = None
+        self.last_f_w = None
+
+
+        ##==== One-time calculations
+
+        # operational angular range of flippers joint axis
+        self.flpjoint_span = dict_flprsPosLimits['max'] - dict_flprsPosLimits['min']
+
+        # operational angular mean of flippers joint axis
+        self.flpjoint_mean = (dict_flprsPosLimits['max'] + dict_flprsPosLimits['min']) / 2
+
+        # chassis articulation kinematics considering that propulsion and chassis frames have all the same orientation (identity matrix)
+        self.J_art_dagger = compute_J_art_dagger(tr_base_piFlp.values())
+
         ##==== ROS interfaces
 
         # publishers
-        self.pub_imuCtrlSig = rospy.Publisher('/rosi/base/space/cmd_vel/ctrl_signal', TwistStamped, queue_size=5)
-        self.pub_dqError = rospy.Publisher('/rosi/base/pose_reg/dq_error', DualQuaternionStamped, queue_size=5)
-        self.pub_dqSetPoint = rospy.Publisher('/rosi/base/pose_reg/set_point', DualQuaternionStamped, queue_size=5)
-        self.pub_dqPoseCurr = rospy.Publisher('/rosi/base/pose', DualQuaternionStamped, queue_size=5)
-        self.pub_ctrlGain = rospy.Publisher('/rosi/base/pose_reg/ctrl_gain', TwistStamped, queue_size=5)
+        self.pub_cmdVelFlipperSpace = rospy.Publisher('/rosi/flippers/space/cmd_v_z/leveler', Float32Array, queue_size=5)
+        #self.pub_imuCtrlSig = rospy.Publisher('/rosi/base/space/cmd_vel/ctrl_signal', TwistStamped, queue_size=5)
+        #self.pub_dqError = rospy.Publisher('/rosi/base/pose_reg/dq_error', DualQuaternionStamped, queue_size=5)
+        #self.pub_dqSetPoint = rospy.Publisher('/rosi/base/pose_reg/set_point', DualQuaternionStamped, queue_size=5)
+        #self.pub_dqPoseCurr = rospy.Publisher('/rosi/base/pose', DualQuaternionStamped, queue_size=5)
+        #self.pub_ctrlGain = rospy.Publisher('/rosi/base/pose_reg/ctrl_gain', TwistStamped, queue_size=5)
 
         # subscribers
         sub_imu = rospy.Subscriber('/mti/sensor/imu', Imu, self.cllbck_imu)
         sub_grndDist = rospy.Subscriber('/rosi/model/base_ground_distance', Vector3ArrayStamped, self.cllbck_grndDist)
+        sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
 
         # services
         srv_setActive = rospy.Service(self.ns.getSrvPath('active', rospy), SetNodeStatus, self.srvcllbck_setActive)
@@ -152,6 +169,87 @@ class NodeClass():
                     # applyes the dead band to the translational control signal (controller do not correct if it is below a threshold)
                     baseTrCtrlSig_db = [cmd if abs(cmd) >= self.deadBand_tr else 0.0 for cmd in baseTrCtrlSig]
 
+
+                    ##=== Computing the control signal 
+
+                    # the base command signal state based on the error signal
+                    u_rdot = 3
+
+
+
+                    """# extracting flippers needed data
+                    _,joint_state = jointStateData2dict(self.flpJointState)
+                    flp_pos = joint_state['pos']    
+
+                    ##=== Computing the error signal
+                    # converting the orientation quaternion to roll-pitch-yaw format
+                    rpy = quat2rpy(self.q_ori.components)
+
+                    # creates a dual-quaternion with the compensation of the yaw component, as the pose reg controls only rol, pitch angles and vertical position
+                    aux = rpy2quat([0, 0, -rpy[2]])
+                    q_transform_yaw = np.quaternion(aux[0], aux[1], aux[2], aux[3])
+
+                    # rotates the orientation quaternion by the yaw compensating element to zerate yaw component
+                    q_x_noYaw = self.q_ori * q_transform_yaw
+
+                    # computing the orientation error
+                    q_e = quatAssurePosW(self.sp_ori.conj() * q_x_noYaw)
+
+
+                    ##=== Generating rotational control signal
+
+                    # computing rotational velocity control signal (aroung x, y, and z base axis)
+                    ctrlSig_rot = np.multiply(self.kp_u, np.multiply(-1, q_e.components[1:3]).tolist() + [0] )# puts a zero to the p_z component, which is not controlled in this control mode
+
+                    print('---')
+                    print(ctrlSig_rot)
+
+                    # applyes the dead band to the rotational control signal  (controller do not correct if it is below a threshold)
+                    ctrlSig_rot_db = [cmd if abs(cmd) >= self.deadBand_rot else 0.0 for cmd in ctrlSig_rot]
+    
+
+                    ##=== COMPUTING \mu function value
+
+                    # first, computes the weight function value 
+                    # currently implemented the joints mean value
+                    aux = [((flp_pos_i - self.flpjoint_mean)/self.flpjoint_span)**2 for flp_pos_i in flp_pos]
+                    n = len(flp_pos)
+                    f_w = -1/(2*n) * sum(aux)
+
+                    if self.last_jointPos is None: # for when it is first control loop run
+
+                        # mu function is zero 
+                        f_mu = 4*[0]
+
+                    else: # for when the controller already run onde
+
+                        # computing delta joint pos and f function
+                        delta_jointPos = [x-y for x,y in zip(flp_pos, self.last_jointPos)]
+                        delta_f_w = f_w - self.last_f_w
+
+                        #  computing the mu function
+                        f_mu = [k_mu_i * (delta_jointPos_i/delta_f_w) for delta_jointPos_i, k_mu_i in zip(delta_jointPos, self.kp_mu)]
+                        
+                        # avoids NaN in f_mu
+                        f_mu = [0 if np.isnan(f_mu_i) else f_mu_i for f_mu_i in f_mu]
+
+                    # updating last value variables
+                    self.last_jointPos = flp_pos
+                    self.last_f_w = f_w
+
+
+                    ## === CALCULATING THE CONTROL SIGNAL
+                    u1 = np.dot(self.J_art_dagger, np.array(ctrlSig_rot_db).reshape(3,1)) 
+                    u2 = np.dot(  np.eye(4) - np.dot(self.J_art_dagger, np.linalg.pinv(self.J_art_dagger)), np.array(f_mu).reshape(4,1) )
+                    #u_l = u1+u2
+                    u_l = u1
+
+                    print('----')
+                    print(u1)
+                    print(u2)
+                    print(u_l)
+
+                    ## === PUBLISHING THE CONTROL SIGNAL
                     # receiving ROS time
                     ros_time = rospy.get_rostime()
 
@@ -159,6 +257,22 @@ class NodeClass():
                     self.drive_side = rospy.get_param(self.drive_side_param_path)
 
                     ##=== Publishing the control command signal
+                    
+                    # publishing message
+                    m = Float32Array()
+                    m.header.stamp = ros_time
+                    m.header.frame_id = self.node_name
+                    m.data = [aux[0] for aux in u_l]
+                    self.pub_cmdVelFlipperSpace.publish(m)     
+                    """            
+
+
+                    """m = Vector3ArrayStamped()
+                    m.header.stamp = rospy.get_rostime()
+                    m.header.frame_id = self.node_name
+                    m.vec = [Vector3(vec[0][0], vec[1][0], vec[2][0]) for vec in dotxp_l]
+                    self.pub_cmdVelFlipperSpace.publish(m)
+                    
                     m = TwistStamped()
                     m.header.stamp = ros_time
                     m.header.frame_id = self.node_name
@@ -239,7 +353,8 @@ class NodeClass():
                     m.twist.angular.x = self.kp_rot[0]
                     m.twist.angular.y = self.kp_rot[1]
                     m.twist.angular.z = self.kp_rot[2]
-                    self.pub_ctrlGain.publish(m)
+                    self.pub_ctrlGain.publish(m)"""
+                    
 
 
             # sleeping the node
@@ -256,6 +371,12 @@ class NodeClass():
         '''Callback for received distance to the ground info'''
         # stores received distance to the ground as a 3D vector
         self.p_grnd = np.array([msg.vec[0].x, msg.vec[0].y, msg.vec[0].z])
+        print(msg)
+    
+
+    def cllbck_jointState(self, msg):
+        ''' Callback for flippers state'''
+        self.flpJointState = msg
 
 
     ''' === Service Callbacks === '''
@@ -313,6 +434,7 @@ if __name__ == '__main__':
     node_name = 'pose_reg_base_cmd_vel'
     rospy.init_node(node_name, anonymous=True)
     rospy.loginfo('node '+node_name+' initiated.')
+    rospy.loginfo('Actually, articulationC_control_1 node initiated!!! Testing purposes only.')
     try:
         node_obj = NodeClass(node_name)
     except rospy.ROSInternalException: pass
