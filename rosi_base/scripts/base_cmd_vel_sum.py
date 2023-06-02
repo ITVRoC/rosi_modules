@@ -20,7 +20,7 @@ class NodeClass():
 
         ##=== PARAMETERS
         # time window to discard last received command
-        self.discardWindow = rospy.Duration.from_sec(1)
+        self.discardWindow = rospy.Duration.from_sec(0.1)
 
         # rosi direction side
         self.drive_side_param_path = '/rosi/forward_side'

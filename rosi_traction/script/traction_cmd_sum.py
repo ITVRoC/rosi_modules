@@ -23,7 +23,7 @@ class NodeClass():
 
         ##=== Parameters
         # time window to discard last received command
-        self.timeWindowToDiscardCmd = rospy.Duration.from_sec(0.3)
+        self.timeWindowToDiscardCmd = rospy.Duration.from_sec(0.1)
 
         ##=== Useful variables
         # node status object

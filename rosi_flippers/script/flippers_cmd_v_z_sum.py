@@ -25,7 +25,7 @@ class NodeClass():
         self.deque_queue_max_elements = 10
 
         # time window to discard last received command
-        self.timeWindowToDiscardCmd = rospy.Duration.from_sec(0.2)
+        self.timeWindowToDiscardCmd = rospy.Duration.from_sec(0.1)
 
         ##=== Useful variables
         # callback messages
