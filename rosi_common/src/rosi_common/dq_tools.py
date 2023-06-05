@@ -321,3 +321,16 @@ def rotateVecByQua(qr, v):
     qv = np.quaternion(0, v[0], v[1], v[2])
     qrot = qr * qv * qr.conj()  # rotating quaternion
     return qrot.components[1:]
+
+
+def dqElementwiseMul(qa, qb):
+    '''Performs the elementwise multiplication of to input dual-quaternion
+    Input
+        - qa <dqrobotics.DQ>: input dual-quaternion element a
+        - qb <dqrobotics.DQ>: input dual-quaternion element b
+    Output
+        - a <dqrobotics.DQ> element  with the result.
+    '''
+    a_qa = qa.vec8()
+    a_qb = qb.vec8()
+    return DQ(np.multiply(a_qa, a_qb).tolist())
