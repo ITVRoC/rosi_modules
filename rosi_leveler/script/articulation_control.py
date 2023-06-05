@@ -13,7 +13,7 @@ import numpy as np
 import quaternion
 from dqrobotics import *
 
-from rosi_common.dq_tools import quat2rpy, rpy2quat, quatAssurePosW, trAndOri2dq, quat2rpy, dq2rpy, dq2trAndQuatArray
+from rosi_common.dq_tools import quat2rpy, rpy2quat, quatAssurePosW, trAndOri2dq, quat2rpy, dq2rpy, dq2trAndQuatArray, dqElementwiseMul
 from rosi_common.dq_tools import *
 
 from rosi_common.rosi_tools import jointStateData2dict, correctFlippersJointSignal, compute_J_art_dagger
@@ -34,20 +34,24 @@ class NodeClass():
 
         #-----------------------------------------------
         # Pose set-point
-        self.sp_pos = [0, 0, 0.33]
-        auxq = rpy2quat(np.deg2rad([0, 0, 0]))
-        self.sp_ori = np.quaternion(auxq[0], auxq[1], auxq[2], auxq[3])
+        sp_pos = [0, 0, 0.33]
+        sp_ori = rpy2quat(np.deg2rad([0, 0, 0]))
+        self.dq_sp = trAndOri2dq(sp_pos, sp_ori, 'trfirst')
         #-----------------------------------------------
 
         # rotational controller kp for each dof [rol, pitch, yaw]
-        #self.kp_rot = [3.5, 6.5, 0]
-        self.kp_u = [1.0, 2.0, 4.0]
+        self.kp_rot = np.array([2.0, 4.0, 1]).reshape(3,1)
+        self.kp_tr = np.array([1, 1, 0.8]).reshape(3,1)
 
-        # gain for the jacobian null space factor
-        self.kp_mu = 4*[0.01]
+        self.kp_dq = DQ([1.0, 2.0, 4.0, 1.0, 1.0, 1.0, 1.0, 0.8])
 
-        # rotational dead-band (the controller do not correct if error is below this value)
+        # command deadband for each subclass
         self.deadBand_rot = 0.01
+        self.deadBand_tr = 0.01
+
+        # imu orientation rotation  correction
+        aux_imu_correct = rpy2quat(np.deg2rad([0, 0, 0]))
+        self.q_imu_correct = np.quaternion(aux_imu_correct[0], aux_imu_correct[1], aux_imu_correct[2], aux_imu_correct[3]) 
 
         # rosi direction side
         self.drive_side_param_path = '/rosi/forward_side'
@@ -125,6 +129,7 @@ class NodeClass():
                 # only runs control if at least one valid IMU and distance to ground messages has been received
                 if self.q_ori is not None and self.p_grnd is not None :
 
+                    #=== Pose definition
                     # creating current pose dual-quaternion
                     dq_x = trAndOri2dq(self.p_grnd, self.q_ori*self.q_imu_correct, 'trfirst')
 
@@ -138,43 +143,69 @@ class NodeClass():
                     # rotates the pose dq by the yaw compensating element to zerate yaw component
                     dq_x_noYaw = dq_x * dq_transform_yaw
 
+
+                    #=== Computing error
                     # computing the pose error
-                    dq_error = self.dq_sp.conj() * dq_x_noYaw
+                    e_R_dq = self.dq_sp.conj() * dq_x_noYaw
                     
+                    #=== Control signal
+
+                    # computing the control signal
+                    u_R_dq = dqElementwiseMul(self.kp_dq.conj(), e_R_dq) # kp_dq.conj
+
+                    # extracting the components from the control signal dual-quaternion
+                    u_R_tr, u_R_q = dq2trAndQuatArray(u_R_dq)
+
+                    # defining the articulation state control signal
+                    u_R_art = np.array([u_R_tr[2][0], u_R_q.components[1], u_R_q.components[2]]).reshape(3,1)
+
+
+                    """
                     # extracting rotation quaternion and translation vector from the error dual-quaternion
-                    tr_e, q_e = dq2trAndQuatArray(dq_error)
-
-
-                    ##=== Generating rotational control signal
+                    e_tr, e_q = dq2trAndQuatArray(e_dq)
+                    
                     # assuring the quaternion has a positive w (considering its double conver on R3 - we want ijk components signal to reflect the necessary rotation to zerate the error)
-                    q_e = quatAssurePosW(q_e)
+                    e_q = quatAssurePosW(e_q)
 
                     # extracting rotational velocity command signal from the error quaternion
-                    rot_ang_error = np.append(quaternion.as_float_array(q_e)[1:3], 0) # zero velocity to yaw
-
-                    # computing rotational velocity control signal (aroung x, y, and z base axis)
-                    baseRotCtrlSig = -rot_ang_error * self.kp_rot
-
-                    # applyes the dead band to the rotational control signal  (controller do not correct if it is below a threshold)
-                    baseRotCtrlSig_db = [cmd if abs(cmd) >= self.deadBand_rot else 0.0 for cmd in baseRotCtrlSig]
-        
-
-                    ##=== Generating translational control signal
-                    # extracting only z component from translational error as flippers only cope with this dof
-                    tr_e = np.array([0, 0, tr_e[2][0]])
-
-                    # computing translational velocity control signal
-                    baseTrCtrlSig = - tr_e * self.kp_tr 
-
-                    # applyes the dead band to the translational control signal (controller do not correct if it is below a threshold)
-                    baseTrCtrlSig_db = [cmd if abs(cmd) >= self.deadBand_tr else 0.0 for cmd in baseTrCtrlSig]
+                    e_rpy = np.append(quaternion.as_float_array(e_q)[1:3], 0).reshape(3,1) # zero velocity to yaw
 
 
-                    ##=== Computing the control signal 
+                    #=== Control signal 
+                    # position control signal
+                    u_R_tr = - self.kp_tr * e_tr
 
-                    # the base command signal state based on the error signal
-                    u_rdot = 3
+                    # orientation control signal
+                    aux = e_q.components
+                    u_R_rot = - self.kp_rot * np.array([aux[1], aux[2], 0]).reshape(3,1)
 
+                    # combined control signal
+                    u_R_c = np.concatenate((u_R_tr, u_R_rot))
+
+                    # articulation control signal
+                    u_R_art = np.concatenate((u_R_c[2], u_R_c[3], u_R_c[4]))  # u_R_art = [u_p_z, u_r_x, u_r_y]
+
+
+                    """
+
+                    # control signal for each propulsion mechanisms vertical axis
+                    u_Pi_art = np.dot(self.J_art_dagger, u_R_art)
+
+                    #=== Publishing the ROS message
+                    # receiving ROS time
+                    ros_time = rospy.get_rostime()
+
+                    # updates drive param
+                    # TODO implement the drive side correction 
+                    self.drive_side = rospy.get_param(self.drive_side_param_path)
+
+                    # mounting and publishing
+                    m = Float32Array()
+                    m.header.stamp = ros_time
+                    m.header.frame_id = self.node_name
+                    m.data = u_Pi_art.flatten().tolist()
+                    self.pub_cmdVelFlipperSpace.publish(m)     
+                    print(m)
 
 
                     """# extracting flippers needed data
