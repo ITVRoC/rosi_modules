@@ -13,11 +13,13 @@ import numpy as np
 import quaternion
 from dqrobotics import *
 
-from rosi_common.dq_tools import quat2rpy, rpy2quat, quatAssurePosW, trAndOri2dq, quat2rpy
+from rosi_common.dq_tools import quat2rpy, rpy2quat, quatAssurePosW, trAndOri2dq, quat2rpy, dq2rpy, dq2trAndQuatArray, dqElementwiseMul
 from rosi_common.dq_tools import *
 
 from rosi_common.rosi_tools import jointStateData2dict, correctFlippersJointSignal, compute_J_art_dagger
 from rosi_common.node_status_tools import nodeStatus
+
+from rosi_common.msg import Vector3ArrayStamped
 from rosi_common.srv import SetNodeStatus, GetNodeStatusList, setPoseSetPointVec, setPoseCtrlGain, getPoseCtrlGain, getPoseSetPointVec
 
 from rosi_model.rosi_description import dict_flprsPosLimits, tr_base_piFlp
@@ -32,20 +34,23 @@ class NodeClass():
 
         #-----------------------------------------------
         # Pose set-point
-        self.sp_pos = [0, 0, 0.33]
-        auxq = rpy2quat(np.deg2rad([0, 0, 0]))
-        self.sp_ori = np.quaternion(auxq[0], auxq[1], auxq[2], auxq[3])
+        aux_sp = rpy2quat(np.deg2rad([0, 0, 0]))
+        self.q_sp = np.quaternion(aux_sp[0], aux_sp[1], aux_sp[2], aux_sp[3])
         #-----------------------------------------------
 
         # rotational controller kp for each dof [rol, pitch, yaw]
-        #self.kp_rot = [3.5, 6.5, 0]
-        self.kp_u = [1.0, 2.0, 4.0]
+        self.kp_rot = np.array([2.0, 4.0, 1]).reshape(3,1)
+        self.kp_tr = np.array([1, 1, 0.8]).reshape(3,1)
 
-        # gain for the jacobian null space factor
-        self.kp_mu = 4*[0.01]
+        self.kp_dq = DQ([1.0, 2.0, 4.0, 1.0, 1.0, 1.0, 1.0, 0.8])
 
-        # rotational dead-band (the controller do not correct if error is below this value)
+        # command deadband for each subclass
         self.deadBand_rot = 0.01
+        self.deadBand_tr = 0.01
+
+        # imu orientation rotation  correction
+        aux_imu_correct = rpy2quat(np.deg2rad([0, 0, 0]))
+        self.q_imu_correct = np.quaternion(aux_imu_correct[0], aux_imu_correct[1], aux_imu_correct[2], aux_imu_correct[3]) 
 
         # rosi direction side
         self.drive_side_param_path = '/rosi/forward_side'
@@ -60,7 +65,7 @@ class NodeClass():
         self.q_ori = None
 
         # stores the robot base distance from the ground
-        #self.p_grnd = None
+        self.p_grnd = None
 
         # ROSI joint states
         self.flpJointState = None
@@ -93,7 +98,7 @@ class NodeClass():
 
         # subscribers
         sub_imu = rospy.Subscriber('/mti/sensor/imu', Imu, self.cllbck_imu)
-        #sub_grndDist = rospy.Subscriber('/rosi/model/base_ground_distance', Vector3ArrayStamped, self.cllbck_grndDist)
+        sub_grndDist = rospy.Subscriber('/rosi/model/base_ground_distance', Vector3ArrayStamped, self.cllbck_grndDist)
         sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
 
         # services
@@ -120,12 +125,60 @@ class NodeClass():
 
             if self.ns.getNodeStatus()['active']: # only runs if node is active
 
-                # only runs control if at least one valid IMU and distance to ground messages has been received
-                if self.q_ori is not None and self.flpJointState is not None :
+                # only runs when required data has been arrived
+                if self.q_ori is not None and self.p_grnd is not None and self.flpJointState is not None:
 
-                    ##=== PREAMBLE
+                    #=== State definition
 
-                    # extracting flippers needed data
+                    # correcting imu physical missorientation
+                    q_ori_corrected = self.q_ori*self.q_imu_correct
+
+                    # copmuting the yaw correction
+                    rpy = quat2rpy(q_ori_corrected)
+                    q_yawcorr = rpy2quat([0, 0, -rpy[2]])
+                    q_yawcorr = np.quaternion(q_yawcorr[0], q_yawcorr[1], q_yawcorr[2], q_yawcorr[3])
+                    q_ori_noYaw = q_ori_corrected * q_yawcorr
+
+
+                    #=== Computing error
+                    # computing the pose error
+                    q_e = self.q_sp.conj() * q_ori_noYaw
+
+                    
+                    #=== Control signal
+
+                    
+
+                    # computing the control signal
+                    u_R_dq = dqElementwiseMul(self.kp_dq.conj(), e_R_dq) # kp_dq.conj
+
+                    # extracting the components from the control signal dual-quaternion
+                    u_R_tr, u_R_q = dq2trAndQuatArray(u_R_dq)
+
+                    # defining the articulation state control signal
+                    u_R_art = np.array([u_R_tr[2][0], u_R_q.components[1], u_R_q.components[2]]).reshape(3,1)
+
+                    # control signal for each propulsion mechanisms vertical axis
+                    u_Pi_art = np.dot(self.J_art_dagger, u_R_art)
+
+                    #=== Publishing the ROS message
+                    # receiving ROS time
+                    ros_time = rospy.get_rostime()
+
+                    # updates drive param
+                    # TODO implement the drive side correction 
+                    self.drive_side = rospy.get_param(self.drive_side_param_path)
+
+                    # mounting and publishing
+                    m = Float32Array()
+                    m.header.stamp = ros_time
+                    m.header.frame_id = self.node_name
+                    m.data = u_Pi_art.flatten().tolist()
+                    self.pub_cmdVelFlipperSpace.publish(m)     
+                    print(m)
+
+
+                    """# extracting flippers needed data
                     _,joint_state = jointStateData2dict(self.flpJointState)
                     flp_pos = joint_state['pos']    
 
@@ -148,6 +201,9 @@ class NodeClass():
 
                     # computing rotational velocity control signal (aroung x, y, and z base axis)
                     ctrlSig_rot = np.multiply(self.kp_u, np.multiply(-1, q_e.components[1:3]).tolist() + [0] )# puts a zero to the p_z component, which is not controlled in this control mode
+
+                    print('---')
+                    print(ctrlSig_rot)
 
                     # applyes the dead band to the rotational control signal  (controller do not correct if it is below a threshold)
                     ctrlSig_rot_db = [cmd if abs(cmd) >= self.deadBand_rot else 0.0 for cmd in ctrlSig_rot]
@@ -208,7 +264,8 @@ class NodeClass():
                     m.header.stamp = ros_time
                     m.header.frame_id = self.node_name
                     m.data = [aux[0] for aux in u_l]
-                    self.pub_cmdVelFlipperSpace.publish(m)                 
+                    self.pub_cmdVelFlipperSpace.publish(m)     
+                    """            
 
 
                     """m = Vector3ArrayStamped()
@@ -311,11 +368,13 @@ class NodeClass():
         self.q_ori = np.quaternion(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z)
 
 
-    """def cllbck_grndDist(self, msg):
+    def cllbck_grndDist(self, msg):
         '''Callback for received distance to the ground info'''
         # stores received distance to the ground as a 3D vector
-        self.p_grnd = np.array([msg.vec[0].x, msg.vec[0].y, msg.vec[0].z])"""
+        self.p_grnd = np.array([msg.vec[0].x, msg.vec[0].y, msg.vec[0].z])
+        print(msg)
     
+
     def cllbck_jointState(self, msg):
         ''' Callback for flippers state'''
         self.flpJointState = msg
