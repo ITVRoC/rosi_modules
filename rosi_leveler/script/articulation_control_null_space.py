@@ -39,7 +39,7 @@ class NodeClass():
         #-----------------------------------------------
 
         # rotational controller kp for each dof [rol, pitch, yaw]
-        self.kp_rot = np.quaternion(1.0, 2.0, 4.0, 1)
+        self.kp_rot = np.quaternion(1.0, 4.0, 8.0, 1)
 
         # command deadband for each subclass
         self.deadBand_rot = 0.01
@@ -52,10 +52,10 @@ class NodeClass():
         #--- null space optimizer
 
         # propulsion joints angular set-point
-        self.flpJointPosSp_l = 4*[np.deg2rad(120)]
+        self.flpJointPosSp_l = 4*[np.deg2rad(110)]
 
         # mu function gain
-        self.kmu_l = 4*[0.5]
+        self.kmu_l = 4*[0.3]
 
         # rosi direction side
         self.drive_side_param_path = '/rosi/forward_side'
@@ -169,22 +169,6 @@ class NodeClass():
                     # control signal
                     u_Pi_ori = u1 + u2
 
-
-                    """
-                    # control signal due to the height optimization
-    
-                    # summing both control signal strategies
-                    u_R_q = u_q_1 + u_q_2
-
-                    print(u_q_1)
-
-                    # defining the orientation state control signal
-                    u_R_ori = np.array([u_R_q[1], u_R_q[2]]).reshape(2,1) # u_R_ori = [omega_x, omega_y]
-
-                    # control signal for each propulsion mechanisms vertical axis
-                    u_Pi_ori = np.dot(self.J_ori_dagger, u_R_ori)
-
-                    """
 
                     #=== Publishing the ROS message
                     # receiving ROS time
@@ -397,7 +381,6 @@ class NodeClass():
         '''Callback for received distance to the ground info'''
         # stores received distance to the ground as a 3D vector
         self.p_grnd = np.array([msg.vec[0].x, msg.vec[0].y, msg.vec[0].z])
-        print(msg)
     
 
     def cllbck_jointState(self, msg):
