@@ -63,6 +63,10 @@ def quat2rpy(q_in):
     '''Converts a quaternion to RPY angles in radians.
     Quaternion must enter as an array [w x y z]'''
 
+    # treats the input if it is a quaternion
+    if isinstance(q_in, quaternion.quaternion):
+        q_in = q_in.components
+
     # extracting the orientation quaterion components
     w = q_in[0]
     x = q_in[1]

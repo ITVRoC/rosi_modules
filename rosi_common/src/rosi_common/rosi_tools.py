@@ -190,7 +190,7 @@ def compute_J_c_dagger(Rotm_R_Pi_l, tr_R_Pi_l):
 
 
 def compute_J_art_dagger(tr_R_Pi_l):
-    ''' Computes the Articulation Kinematics pseudo-inverse already CONSIDERING that all propulsion frames {Pi} are 
+    ''' Computes the Chassis Articulation Kinematics pseudo-inverse already CONSIDERING that all propulsion frames {Pi} are 
     aligned wrt {R}
     Input
         - tr_R_Pi_l <list> a list containing tr_R_Pi_l <np.array> 3D translation vector of {Pi} wrt {R}
@@ -200,6 +200,20 @@ def compute_J_art_dagger(tr_R_Pi_l):
     J_l = []
     for tr_R_Pi in tr_R_Pi_l:
         J_l.append([1, tr_R_Pi[1][0], -tr_R_Pi[0][0] ])
+    return np.concatenate([J_l], axis=0)
+
+
+def compute_J_ori_dagger(tr_R_Pi_l):
+    ''' Computes the Chassis Orientation Kinematics pseudo-inverse already CONSIDERING that all propulsion frames {Pi} are 
+    aligned wrt {R}
+    Input
+        - tr_R_Pi_l <list> a list containing tr_R_Pi_l <np.array> 3D translation vector of {Pi} wrt {R}
+    Output
+        - the Articulation Jacobian <np.array>{len(tr_R_Pi_l)x3}
+    '''
+    J_l = []
+    for tr_R_Pi in tr_R_Pi_l:
+        J_l.append([tr_R_Pi[1][0], -tr_R_Pi[0][0] ])
     return np.concatenate([J_l], axis=0)
 
 

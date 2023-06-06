@@ -16,7 +16,7 @@ from dqrobotics import *
 from rosi_common.dq_tools import quat2rpy, rpy2quat, quatAssurePosW, trAndOri2dq, quat2rpy, dq2rpy, dq2trAndQuatArray, dqElementwiseMul
 from rosi_common.dq_tools import *
 
-from rosi_common.rosi_tools import jointStateData2dict, correctFlippersJointSignal, compute_J_art_dagger
+from rosi_common.rosi_tools import compute_J_ori_dagger, correctFlippersJointSignal
 from rosi_common.node_status_tools import nodeStatus
 
 from rosi_common.msg import Vector3ArrayStamped
@@ -39,10 +39,7 @@ class NodeClass():
         #-----------------------------------------------
 
         # rotational controller kp for each dof [rol, pitch, yaw]
-        self.kp_rot = np.array([2.0, 4.0, 1]).reshape(3,1)
-        self.kp_tr = np.array([1, 1, 0.8]).reshape(3,1)
-
-        self.kp_dq = DQ([1.0, 2.0, 4.0, 1.0, 1.0, 1.0, 1.0, 0.8])
+        self.kp_rot = np.quaternion(1.0, 2.0, 4.0, 1)
 
         # command deadband for each subclass
         self.deadBand_rot = 0.01
@@ -51,6 +48,14 @@ class NodeClass():
         # imu orientation rotation  correction
         aux_imu_correct = rpy2quat(np.deg2rad([0, 0, 0]))
         self.q_imu_correct = np.quaternion(aux_imu_correct[0], aux_imu_correct[1], aux_imu_correct[2], aux_imu_correct[3]) 
+
+        #--- null space optimizer
+
+        # propulsion joints angular set-point
+        self.flpJointPosSp_l = 4*[np.deg2rad(120)]
+
+        # mu function gain
+        self.kmu_l = 4*[0.5]
 
         # rosi direction side
         self.drive_side_param_path = '/rosi/forward_side'
@@ -83,8 +88,14 @@ class NodeClass():
         # operational angular mean of flippers joint axis
         self.flpjoint_mean = (dict_flprsPosLimits['max'] + dict_flprsPosLimits['min']) / 2
 
-        # chassis articulation kinematics considering that propulsion and chassis frames have all the same orientation (identity matrix)
-        self.J_art_dagger = compute_J_art_dagger(tr_base_piFlp.values())
+        # chassis orientaiton kinematics considering that propulsion and chassis frames have all the same orientation (identity matrix)
+        self.J_ori_dagger = compute_J_ori_dagger(tr_base_piFlp.values())
+
+        # the orientation jacobian
+        self.J_ori = np.linalg.pinv(self.J_ori_dagger)
+
+        # the orientation jacobian null-space projector
+        self.J_ori_nsproj = np.eye(4) - np.dot(self.J_ori_dagger, self.J_ori)
 
         ##==== ROS interfaces
 
@@ -129,7 +140,6 @@ class NodeClass():
                 if self.q_ori is not None and self.p_grnd is not None and self.flpJointState is not None:
 
                     #=== State definition
-
                     # correcting imu physical missorientation
                     q_ori_corrected = self.q_ori*self.q_imu_correct
 
@@ -139,27 +149,42 @@ class NodeClass():
                     q_yawcorr = np.quaternion(q_yawcorr[0], q_yawcorr[1], q_yawcorr[2], q_yawcorr[3])
                     q_ori_noYaw = q_ori_corrected * q_yawcorr
 
-
                     #=== Computing error
                     # computing the pose error
                     q_e = self.q_sp.conj() * q_ori_noYaw
 
                     
                     #=== Control signal
+                
 
-                    
+                    # control signal component due to the orientation error
+                    u1_q_e_gain = np.multiply(self.kp_rot.conj().components, q_e.components)
+                    u1_R_e_gain = np.array([u1_q_e_gain[1], u1_q_e_gain[2]]).reshape(2,1)
+                    u1 = np.dot(self.J_ori_dagger, u1_R_e_gain)
 
-                    # computing the control signal
-                    u_R_dq = dqElementwiseMul(self.kp_dq.conj(), e_R_dq) # kp_dq.conj
+                    # control signal component that optimizes flipper joints angular position
+                    flpJPos = correctFlippersJointSignal(self.flpJointState.position[4:])
+                    u2 = np.dot(self.J_ori_nsproj, self.computeU2(flpJPos, self.flpJointPosSp_l, self.kmu_l))
 
-                    # extracting the components from the control signal dual-quaternion
-                    u_R_tr, u_R_q = dq2trAndQuatArray(u_R_dq)
+                    # control signal
+                    u_Pi_ori = u1 + u2
 
-                    # defining the articulation state control signal
-                    u_R_art = np.array([u_R_tr[2][0], u_R_q.components[1], u_R_q.components[2]]).reshape(3,1)
+
+                    """
+                    # control signal due to the height optimization
+    
+                    # summing both control signal strategies
+                    u_R_q = u_q_1 + u_q_2
+
+                    print(u_q_1)
+
+                    # defining the orientation state control signal
+                    u_R_ori = np.array([u_R_q[1], u_R_q[2]]).reshape(2,1) # u_R_ori = [omega_x, omega_y]
 
                     # control signal for each propulsion mechanisms vertical axis
-                    u_Pi_art = np.dot(self.J_art_dagger, u_R_art)
+                    u_Pi_ori = np.dot(self.J_ori_dagger, u_R_ori)
+
+                    """
 
                     #=== Publishing the ROS message
                     # receiving ROS time
@@ -173,9 +198,9 @@ class NodeClass():
                     m = Float32Array()
                     m.header.stamp = ros_time
                     m.header.frame_id = self.node_name
-                    m.data = u_Pi_art.flatten().tolist()
+                    m.data = u_Pi_ori.flatten().tolist()
                     self.pub_cmdVelFlipperSpace.publish(m)     
-                    print(m)
+                    #print(m)
 
 
                     """# extracting flippers needed data
@@ -429,6 +454,12 @@ class NodeClass():
         while not  rospy.has_param(path_param):
             rospy.loginfo("[manager] Waiting for param: %s", path_param)
         return rospy.get_param(path_param)
+
+
+    @staticmethod
+    def computeU2(flpJointPos_l, flpJointPosSp_l, kmu_l):
+        aux = [ ki * (jsp - jcurr) for jcurr, jsp, ki in zip(flpJointPos_l, flpJointPosSp_l, kmu_l)]
+        return np.array(aux).reshape(4,1)
 
 
 if __name__ == '__main__':

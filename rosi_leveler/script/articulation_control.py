@@ -13,10 +13,10 @@ import numpy as np
 import quaternion
 from dqrobotics import *
 
-from rosi_common.dq_tools import quat2rpy, rpy2quat, quatAssurePosW, trAndOri2dq, quat2rpy, dq2rpy, dq2trAndQuatArray, dqElementwiseMul
+from rosi_common.dq_tools import rpy2quat, trAndOri2dq, dq2rpy, dq2trAndQuatArray, dqElementwiseMul
 from rosi_common.dq_tools import *
 
-from rosi_common.rosi_tools import jointStateData2dict, correctFlippersJointSignal, compute_J_art_dagger
+from rosi_common.rosi_tools import compute_J_art_dagger
 from rosi_common.node_status_tools import nodeStatus
 
 from rosi_common.msg import Vector3ArrayStamped
@@ -68,9 +68,6 @@ class NodeClass():
         # stores the robot base distance from the ground
         self.p_grnd = None
 
-        # ROSI joint states
-        self.flpJointState = None
-
         # for storing joints and w function last values
         self.last_jointPos = None
         self.last_f_w = None
@@ -100,7 +97,6 @@ class NodeClass():
         # subscribers
         sub_imu = rospy.Subscriber('/mti/sensor/imu', Imu, self.cllbck_imu)
         sub_grndDist = rospy.Subscriber('/rosi/model/base_ground_distance', Vector3ArrayStamped, self.cllbck_grndDist)
-        sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
 
         # services
         srv_setActive = rospy.Service(self.ns.getSrvPath('active', rospy), SetNodeStatus, self.srvcllbck_setActive)
@@ -158,35 +154,6 @@ class NodeClass():
 
                     # defining the articulation state control signal
                     u_R_art = np.array([u_R_tr[2][0], u_R_q.components[1], u_R_q.components[2]]).reshape(3,1)
-
-
-                    """
-                    # extracting rotation quaternion and translation vector from the error dual-quaternion
-                    e_tr, e_q = dq2trAndQuatArray(e_dq)
-                    
-                    # assuring the quaternion has a positive w (considering its double conver on R3 - we want ijk components signal to reflect the necessary rotation to zerate the error)
-                    e_q = quatAssurePosW(e_q)
-
-                    # extracting rotational velocity command signal from the error quaternion
-                    e_rpy = np.append(quaternion.as_float_array(e_q)[1:3], 0).reshape(3,1) # zero velocity to yaw
-
-
-                    #=== Control signal 
-                    # position control signal
-                    u_R_tr = - self.kp_tr * e_tr
-
-                    # orientation control signal
-                    aux = e_q.components
-                    u_R_rot = - self.kp_rot * np.array([aux[1], aux[2], 0]).reshape(3,1)
-
-                    # combined control signal
-                    u_R_c = np.concatenate((u_R_tr, u_R_rot))
-
-                    # articulation control signal
-                    u_R_art = np.concatenate((u_R_c[2], u_R_c[3], u_R_c[4]))  # u_R_art = [u_p_z, u_r_x, u_r_y]
-
-
-                    """
 
                     # control signal for each propulsion mechanisms vertical axis
                     u_Pi_art = np.dot(self.J_art_dagger, u_R_art)
@@ -404,10 +371,6 @@ class NodeClass():
         self.p_grnd = np.array([msg.vec[0].x, msg.vec[0].y, msg.vec[0].z])
         print(msg)
     
-
-    def cllbck_jointState(self, msg):
-        ''' Callback for flippers state'''
-        self.flpJointState = msg
 
 
     ''' === Service Callbacks === '''
