@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
 ''' This is a ROSI algorithm
-It controls the body attitude by actively controlling the chassis orientation
-and using the height as an optimization parameter. 
-It sends as the output control signal the linear velocity on v_z_Pi, on the flipper's space
+It controls the chassis
+based on different control strategies
 '''
 import rospy
+import numpy as np
+import quaternion
+from dqrobotics import *
+
+from rosi_common.chassis_control_tools import *
+
+from rosi_common.dq_tools import quat2rpy, rpy2quat
+from rosi_common.rosi_tools import correctFlippersJointSignal, compute_J_ori_dagger
+from rosi_model.rosi_description import tr_base_piFlp
 
 from rosi_common.msg import Float32Array
 from sensor_msgs.msg import Imu, JointState
 
-import numpy as np
-import quaternion
-from dqrobotics import *
+
+##
+
 
 from rosi_common.dq_tools import rpy2quat, trAndOri2dq, dq2rpy, dq2trAndQuatArray, dqElementwiseMul
 from rosi_common.dq_tools import *
@@ -22,7 +30,7 @@ from rosi_common.node_status_tools import nodeStatus
 from rosi_common.msg import Vector3ArrayStamped
 from rosi_common.srv import SetNodeStatus, GetNodeStatusList, setPoseSetPointVec, setPoseCtrlGain, getPoseCtrlGain, getPoseSetPointVec
 
-from rosi_model.rosi_description import dict_flprsPosLimits, tr_base_piFlp
+
 
 class NodeClass():
 
@@ -34,20 +42,42 @@ class NodeClass():
 
         #-----------------------------------------------
         # Pose set-point
-        sp_pos = [0, 0, 0.33]
-        sp_ori = rpy2quat(np.deg2rad([0, 0, 0]))
-        self.dq_sp = trAndOri2dq(sp_pos, sp_ori, 'trfirst')
+        #sp_pos = [0, 0, 0.33]
+        #sp_ori = rpy2quat(np.deg2rad([0, 0, 0]))
+        #self.dq_sp = trAndOri2dq(sp_pos, sp_ori, 'trfirst')
         #-----------------------------------------------
 
-        # rotational controller kp for each dof [rol, pitch, yaw]
-        self.kp_rot = np.array([2.0, 4.0, 1]).reshape(3,1)
-        self.kp_tr = np.array([1, 1, 0.8]).reshape(3,1)
+        #=== Set-point
+        aux_sp = rpy2quat(np.deg2rad([0, 0, 0]))
+        self.q_sp = np.quaternion(aux_sp[0], aux_sp[1], aux_sp[2], aux_sp[3])
+        
 
-        self.kp_dq = DQ([1.0, 2.0, 4.0, 1.0, 1.0, 1.0, 1.0, 0.8])
+        #=== Control gains
+        # rotational controller kp for each dof [rol, pitch, yaw]
+        self.kp_tr_q = np.quaternion(1.0, 1.0, 1.0, 0.8)
+        self.kp_rot_q = np.quaternion(1.0, 4.0, 8.0, 1)
+
+
+        #=== Mu function for the null-space controller parameters
+        # propulsion joints angular set-point for the null-space
+        self.flpJointPosSp_l = 4*[np.deg2rad(110)]
+
+        # mu function gain
+        self.kmu_l = 4*[0.3]
+
+
+
+
+
+        # rotational controller kp for each dof [rol, pitch, yaw]
+        #self.kp_rot = np.array([2.0, 4.0, 1]).reshape(3,1)
+        #self.kp_tr = np.array([1, 1, 0.8]).reshape(3,1)
+
+        #self.kp_dq = DQ([1.0, 2.0, 4.0, 1.0, 1.0, 1.0, 1.0, 0.8])
 
         # command deadband for each subclass
-        self.deadBand_rot = 0.01
-        self.deadBand_tr = 0.01
+        #self.deadBand_rot = 0.01
+        #self.deadBand_tr = 0.01
 
         # imu orientation rotation  correction
         aux_imu_correct = rpy2quat(np.deg2rad([0, 0, 0]))
@@ -56,17 +86,21 @@ class NodeClass():
         # rosi direction side
         self.drive_side_param_path = '/rosi/forward_side'
         self.drive_side = self.getParamWithWait(self.drive_side_param_path)
+
+        
     
         ##=== Useful variables
         # node status object
         self.ns = nodeStatus(node_name)
         #self.ns.resetActive() # this node is disabled by default
 
-        # stores IMU current orientation
-        self.q_ori = None
+        # ROS topic message variables
+        self.msg_grndDist = None
+        self.msg_jointState = None
+        self.msg_imu = None
 
-        # stores the robot base distance from the ground
-        self.p_grnd = None
+        # current control type
+        self.ctrlType_curr = chassisCtrlType['orientationNullSpace']
 
         # for storing joints and w function last values
         self.last_jointPos = None
@@ -76,13 +110,22 @@ class NodeClass():
         ##==== One-time calculations
 
         # operational angular range of flippers joint axis
-        self.flpjoint_span = dict_flprsPosLimits['max'] - dict_flprsPosLimits['min']
+        #self.flpjoint_span = dict_flprsPosLimits['max'] - dict_flprsPosLimits['min']
 
         # operational angular mean of flippers joint axis
-        self.flpjoint_mean = (dict_flprsPosLimits['max'] + dict_flprsPosLimits['min']) / 2
+        #self.flpjoint_mean = (dict_flprsPosLimits['max'] + dict_flprsPosLimits['min']) / 2
 
         # chassis articulation kinematics considering that propulsion and chassis frames have all the same orientation (identity matrix)
-        self.J_art_dagger = compute_J_art_dagger(tr_base_piFlp.values())
+        #self.J_art_dagger = compute_J_art_dagger(tr_base_piFlp.values())
+
+        # chassis orientation kinematics considering that propulsion and chassis frames have all the same orientation (identity matrix)
+        self.J_ori_dagger = compute_J_ori_dagger(tr_base_piFlp.values())
+
+        # the orientation jacobian
+        self.J_ori = np.linalg.pinv(self.J_ori_dagger)
+
+        # the orientation jacobian null-space projector
+        self.J_ori_nsproj = np.eye(4) - np.dot(self.J_ori_dagger, self.J_ori)
 
         ##==== ROS interfaces
 
@@ -97,6 +140,7 @@ class NodeClass():
         # subscribers
         sub_imu = rospy.Subscriber('/mti/sensor/imu', Imu, self.cllbck_imu)
         sub_grndDist = rospy.Subscriber('/rosi/model/base_ground_distance', Vector3ArrayStamped, self.cllbck_grndDist)
+        sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
 
         # services
         srv_setActive = rospy.Service(self.ns.getSrvPath('active', rospy), SetNodeStatus, self.srvcllbck_setActive)
@@ -115,17 +159,88 @@ class NodeClass():
         '''Node main method'''
 
         # defining the eternal loop rate
-        node_rate_sleep = rospy.Rate(10)
+        node_rate_sleep = rospy.Rate(20)
 
         rospy.loginfo('Entering in ethernal loop.')
         while not rospy.is_shutdown():
 
             if self.ns.getNodeStatus()['active']: # only runs if node is active
 
-                # only runs control if at least one valid IMU and distance to ground messages has been received
-                if self.q_ori is not None and self.p_grnd is not None :
 
-                    #=== Pose definition
+                # only runs the control when all needed input variables are available
+                if self.msg_grndDist is not None and self.msg_jointState is not None and self.msg_imu is not None:
+
+                    #=== Computations needed independently of the current control mode
+
+                    # setting the imu ROS data in the numpy quaternion format
+                    q_imu = np.quaternion(self.msg_imu.orientation.w, self.msg_imu.orientation.x, self.msg_imu.orientation.y, self.msg_imu.orientation.z)
+
+                    # correcting imu physical missorientation
+                    q_imu_corrected = q_imu*self.q_imu_correct
+
+                    # copmuting the chassis orientation without the yaw component
+                    rpy = quat2rpy(q_imu_corrected)
+                    q_yawcorr = rpy2quat([0, 0, -rpy[2]])
+                    q_yawcorr = np.quaternion(q_yawcorr[0], q_yawcorr[1], q_yawcorr[2], q_yawcorr[3])
+                    q_R_noYaw = q_imu_corrected * q_yawcorr
+
+            
+                    #=== Control modes implementation
+                    # If the control mode is orientation
+                    if self.ctrlType_curr == chassisCtrlType['orientation'] or self.ctrlType_curr == chassisCtrlType['orientationNullSpace']:
+                        
+                        # computing the orientation error
+                        q_e = self.q_sp.conj() * q_R_noYaw
+
+                        # control signal component due to the orientation error
+                        u_R_q = np.multiply(self.kp_rot_q.conj().components, q_e.components)
+                        u_R_v = np.array([u_R_q[1], u_R_q[2]]).reshape(2,1)
+                        u_Pi_v =  np.dot(self.J_ori_dagger, u_R_v)
+
+                        # compute the null space component if this control mode is enabled
+                        if self.ctrlType_curr == chassisCtrlType['orientationNullSpace']:
+
+                            # treating flippers position
+                            flpJPos_l = correctFlippersJointSignal(self.msg_jointState.position[4:])
+
+                            # computing the null-space projector function component
+                            mu = np.array([ ki * (jsp - jcurr) for jcurr, jsp, ki in zip(flpJPos_l, self.flpJointPosSp_l, self.kmu_l)]).reshape(4,1)
+
+                            # computing the null-space projector control signal component
+                            aux_u = np.dot(self.J_ori_nsproj, mu)
+
+                            # summing the component to the current orientation signal
+                            u_Pi_v = u_Pi_v + aux_u
+
+
+                    # If the c ontrol mode is articulation
+                    elif self.controlType == chassisCtrlType['articulation']:
+                        pass
+                        # TODO Implementar o controle de articulacao
+
+                    # If the selected control mode is invalid
+                    else:
+                        u_Pi_v = np.array([0, 0, 0, 0]).reshape(4,1)
+                    
+
+                    #=== Publishing the ROS message
+                    # receiving ROS time
+                    ros_time = rospy.get_rostime()
+
+                    # updates drive param
+                    # TODO implement the drive side correction 
+                    self.drive_side = rospy.get_param(self.drive_side_param_path)
+
+                    # mounting and publishing
+                    m = Float32Array()
+                    m.header.stamp = ros_time
+                    m.header.frame_id = self.node_name
+                    m.data = u_Pi_v.flatten().tolist()
+                    self.pub_cmdVelFlipperSpace.publish(m)     
+                    print(m)
+
+
+                    """#=== Pose definition
                     # creating current pose dual-quaternion
                     dq_x = trAndOri2dq(self.p_grnd, self.q_ori*self.q_imu_correct, 'trfirst')
 
@@ -172,7 +287,11 @@ class NodeClass():
                     m.header.frame_id = self.node_name
                     m.data = u_Pi_art.flatten().tolist()
                     self.pub_cmdVelFlipperSpace.publish(m)     
-                    print(m)
+                    print(m)"""
+
+
+
+
 
 
                     """# extracting flippers needed data
@@ -359,19 +478,22 @@ class NodeClass():
             node_rate_sleep.sleep()
 
     
+    ''' === Topics callbacks ==='''
     def cllbck_imu(self, msg):
         '''Callback for the IMU messages.'''
-        # creating a numpy quaternion element
-        self.q_ori = np.quaternion(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z)
+        self.msg_imu = msg      
 
 
     def cllbck_grndDist(self, msg):
         '''Callback for received distance to the ground info'''
         # stores received distance to the ground as a 3D vector
-        self.p_grnd = np.array([msg.vec[0].x, msg.vec[0].y, msg.vec[0].z])
-        print(msg)
-    
+        self.msg_grndDist = msg
 
+    
+    def cllbck_jointState(self, msg):
+        ''' Callback for flippers state'''
+        self.msg_jointState = msg
+    
 
     ''' === Service Callbacks === '''
     def srvcllbck_setActive(self, req):
@@ -425,7 +547,7 @@ class NodeClass():
 
 
 if __name__ == '__main__':
-    node_name = 'pose_reg_base_cmd_vel'
+    node_name = 'chassis_control'
     rospy.init_node(node_name, anonymous=True)
     rospy.loginfo('node '+node_name+' initiated.')
     rospy.loginfo('Actually, articulationC_control_1 node initiated!!! Testing purposes only.')

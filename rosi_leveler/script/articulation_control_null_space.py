@@ -155,8 +155,7 @@ class NodeClass():
 
                     
                     #=== Control signal
-                
-
+            
                     # control signal component due to the orientation error
                     u1_q_e_gain = np.multiply(self.kp_rot.conj().components, q_e.components)
                     u1_R_e_gain = np.array([u1_q_e_gain[1], u1_q_e_gain[2]]).reshape(2,1)

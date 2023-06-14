@@ -31,7 +31,7 @@ class NodeClass():
                 'joy_flippers_cmdVel',   
                 'flippers_cmd_sum',  
                 'rosi_to_traction_cmd_vel', 
-                'pose_reg_base_cmd_vel' 
+                'chassis_control' 
         )
 
         self.d_operative_mode = {
