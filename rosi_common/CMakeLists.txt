@@ -70,6 +70,7 @@ add_service_files(
     setPoseCtrlGain.srv
     GetString.srv
     GetInt.srv
+    SetInt.srv
     SetNodeIntState.srv
     GetNodeStatus.srv
     getPoseCtrlGain.srv 

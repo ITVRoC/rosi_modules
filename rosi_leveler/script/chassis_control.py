@@ -8,9 +8,7 @@ import numpy as np
 import quaternion
 from dqrobotics import *
 
-from rosi_common.chassis_control_tools import chassisCtrlType
-
-from rosi_common.dq_tools import quat2rpy, rpy2quat, trAndOri2dq, dqElementwiseMul, dq2trAndQuatArray
+from rosi_common.dq_tools import quat2rpy, rpy2quat, trAndOri2dq, dqElementwiseMul, dq2trAndQuatArray, dqExtractTransV3, dq2rpy
 from rosi_common.rosi_tools import correctFlippersJointSignal, compute_J_ori_dagger, compute_J_art_dagger
 from rosi_common.node_status_tools import nodeStatus
 from rosi_model.rosi_description import tr_base_piFlp
@@ -18,7 +16,7 @@ from rosi_model.rosi_description import tr_base_piFlp
 from rosi_common.msg import Float32Array, Vector3ArrayStamped
 from sensor_msgs.msg import Imu, JointState
 
-from rosi_common.srv import SetNodeStatus, GetNodeStatusList, setPoseSetPointVec, setPoseCtrlGain, getPoseCtrlGain, getPoseSetPointVec, SetInt, GetInt
+from rosi_common.srv import SetNodeStatus, GetNodeStatusList, setPoseSetPointVec, setPoseCtrlGain, getPoseCtrlGain, getPoseSetPointVec, SetInt, SetIntResponse, GetInt, GetIntResponse
 
 
 class NodeClass():
@@ -35,9 +33,6 @@ class NodeClass():
         
         # ground distance
         x_sp_tr = [0.0, 0.0, 0.3] # in meters
-
-        # computing the set-points in orientation quaternion and pose dual quaternion
-        self.x_sp_ori_q, self.x_sp_dq  = self.convertSetPoints2DqFormat(x_sp_tr, x_sp_ori_rpy)
        
 
         #----------------- CONTROL GAINS ------------------------------
@@ -75,8 +70,15 @@ class NodeClass():
         self.msg_jointState = None
         self.msg_imu = None
 
+        # Available control types
+        self.chassisCtrlType = {
+            "orientation": 1,
+            "orientationNullSpace": 2,
+            "articulation": 3
+        }
+
         # current control type
-        self.ctrlType_curr = chassisCtrlType['articulation']
+        self.ctrlType_curr = self.chassisCtrlType['orientation']
 
         # for storing joints and w function last values
         self.last_jointPos = None
@@ -84,6 +86,15 @@ class NodeClass():
 
 
         ##========= One-time calculations ===================================
+        # computing the set-points in orientation quaternion and pose dual quaternion
+        self.x_sp_ori_q, self.x_sp_dq  = self.convertSetPoints2DqFormat(x_sp_tr, x_sp_ori_rpy)
+
+        # orientation controller gain in quaternion format
+        self.kp_o_q = np.quaternion(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2])
+
+        # articulation  controller gain in dual quaternion format
+        self.kp_a_dq = DQ(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2], 1, kp_tr_v[0], kp_tr_v[1], kp_tr_v[2])  
+
         # chassis orientation kinematics considering that propulsion and chassis frames have all the same orientation (identity matrix)
         self.J_ori_dagger = compute_J_ori_dagger(tr_base_piFlp.values())
 
@@ -92,12 +103,6 @@ class NodeClass():
 
         # the orientation jacobian null-space projector
         self.J_ori_nsproj = np.eye(4) - np.dot(self.J_ori_dagger, self.J_ori)
-
-        # orientation controller gain in quaternion format
-        self.kp_o_q = np.quaternion(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2])
-        
-        # articulation  controller gain in dual quaternion format
-        self.kp_a_dq = DQ(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2], 1, kp_tr_v[0], kp_tr_v[1], kp_tr_v[2])           
 
         # chassis articulation kinematics considering that propulsion and chassis frames have all the same orientation (identity matrix)
         self.J_art_dagger = compute_J_art_dagger(tr_base_piFlp.values())
@@ -121,13 +126,13 @@ class NodeClass():
         srv_setActive = rospy.Service(self.ns.getSrvPath('active', rospy), SetNodeStatus, self.srvcllbck_setActive)
         srv_getStatus = rospy.Service(self.ns.getSrvPath('getNodeStatus', rospy), GetNodeStatusList, self.srvcllbck_getStatus)
         srv_setHaltCmd = rospy.Service(self.ns.getSrvPath('haltcmd', rospy), SetNodeStatus, self.srvcllbck_setHaltCmd)
-        srv_setPoseSetPoint = rospy.Service(self.node_name+'/set_pose_set_point', setPoseSetPointVec, self.srvcllbck_setPoseSetPoint)
-        srv_setPoseCtrlGain = rospy.Service(self.node_name+'/set_pose_ctrl_gain', setPoseCtrlGain, self.srvcllbck_setPoseCtrlGain)
+        srv_setPoseSetPoint = rospy.Service(self.node_name+'/set_pose_set_point', setPoseSetPointVec, self.srvcllbck_setPoseSetPoint) 
+        srv_setPoseCtrlGain = rospy.Service(self.node_name+'/set_pose_ctrl_gain', setPoseCtrlGain, self.srvcllbck_setPoseCtrlGain) 
         srv_setCtrlType = rospy.Service(self.node_name+'/set_ctrl_type', SetInt, self.srvcllbck_setCtrlType) 
 
-        srv_getPoseSetPoint = rospy.Service(self.node_name+'/get_pose_set_point', getPoseSetPointVec, self.srvcllbck_getPoseSetPoint)
+        srv_getPoseSetPoint = rospy.Service(self.node_name+'/get_pose_set_point', getPoseSetPointVec, self.srvcllbck_getPoseSetPoint) 
         srv_getPoseCtrlGain = rospy.Service(self.node_name+'/get_pose_ctrl_gain', getPoseCtrlGain, self.srvcllbck_getPoseCtrlGain) 
-        srv_getCtrlType = rospy.Service(self.node_name+'/get_ctrl_type', setPoseCtrlGain, self.srvcllbck_setPoseCtrlGain) # !
+        srv_getCtrlType = rospy.Service(self.node_name+'/get_ctrl_type', GetInt, self.srvcllbck_getCtrlType)
 
 
         # Node main
@@ -141,7 +146,7 @@ class NodeClass():
         # defining the eternal loop rate
         node_rate_sleep = rospy.Rate(20)
 
-        rospy.loginfo('Entering in ethernal loop.')
+        rospy.loginfo('[%s] Entering in ethernal loop.', self.node_name)
         while not rospy.is_shutdown():
 
             # only runs if node is active
@@ -166,18 +171,18 @@ class NodeClass():
             
                     #=== Control modes implementation
                     # If the control mode is orientation
-                    if self.ctrlType_curr == chassisCtrlType['orientation'] or self.ctrlType_curr == chassisCtrlType['orientationNullSpace']:
+                    if self.ctrlType_curr == self.chassisCtrlType['orientation'] or self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace']:
                         
                         # computing the orientation error
-                        e_o_R_q = self.x_o_sp_q.conj() * x_o_R_q
+                        e_o_R_q = self.x_sp_ori_q.conj() * x_o_R_q
 
                         # control signal component due to the orientation error
-                        u_o_R_q = np.multiply(self.kp_rot_q.conj().components, e_o_R_q.components)
+                        u_o_R_q = np.multiply(self.kp_o_q.conj().components, e_o_R_q.components)
                         u_o_R_v = np.array([u_o_R_q[1], u_o_R_q[2]]).reshape(2,1)
                         u_Pi_v =  np.dot(self.J_ori_dagger, u_o_R_v)
 
                         # if the joints optimization is enabled, computes the null space component if this control mode is enabled
-                        if self.ctrlType_curr == chassisCtrlType['orientationNullSpace']:
+                        if self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace']:
 
                             # treating flippers position
                             flpJPos_l = correctFlippersJointSignal(self.msg_jointState.position[4:])
@@ -193,7 +198,7 @@ class NodeClass():
 
 
                     # If the control mode is articulation
-                    elif self.ctrlType_curr == chassisCtrlType['articulation']:
+                    elif self.ctrlType_curr == self.chassisCtrlType['articulation']:
 
                         # defining the articulation pose 
                         x_a_R_dq = trAndOri2dq([0, 0, self.msg_grndDist.vec[0].z], x_o_R_q, 'trfirst')
@@ -232,60 +237,7 @@ class NodeClass():
                     m.header.frame_id = self.node_name
                     m.data = u_Pi_v.flatten().tolist()
                     self.pub_cmdVelFlipperSpace.publish(m)     
-                    print(m)
-
-
-                    """#=== Pose definition
-                    # creating current pose dual-quaternion
-                    dq_x = trAndOri2dq(self.p_grnd, self.q_ori*self.q_imu_correct, 'trfirst')
-
-                    # converting the pose dq to roll-pitch-yaw format
-                    rpy = dq2rpy(dq_x)
-
-                    # creates a dual-quaternion with the compensation of the yaw component, as the pose reg controls only rol, pitch angles and vertical position
-                    aux = rpy2quat([0, 0, -rpy[2]])
-                    dq_transform_yaw = trAndOri2dq([0,0,0], aux, 'trfirst')
-
-                    # rotates the pose dq by the yaw compensating element to zerate yaw component
-                    dq_x_noYaw = dq_x * dq_transform_yaw
-
-
-                    #=== Computing error
-                    # computing the pose error
-                    e_R_dq = self.dq_sp.conj() * dq_x_noYaw
-                    
-                    #=== Control signal
-
-                    # computing the control signal
-                    u_R_dq = dqElementwiseMul(self.kp_dq.conj(), e_R_dq) # kp_dq.conj
-
-                    # extracting the components from the control signal dual-quaternion
-                    u_R_tr, u_o_R_q = dq2trAndQuatArray(u_R_dq)
-
-                    # defining the articulation state control signal
-                    u_R_art = np.array([u_R_tr[2][0], u_o_R_q.components[1], u_o_R_q.components[2]]).reshape(3,1)
-
-                    # control signal for each propulsion mechanisms vertical axis
-                    u_Pi_art = np.dot(self.J_art_dagger, u_R_art)
-
-                    #=== Publishing the ROS message
-                    # receiving ROS time
-                    ros_time = rospy.get_rostime()
-
-                    # updates drive param
-                    # TODO implement the drive side correction 
-                    self.drive_side = rospy.get_param(self.drive_side_param_path)
-
-                    # mounting and publishing
-                    m = Float32Array()
-                    m.header.stamp = ros_time
-                    m.header.frame_id = self.node_name
-                    m.data = u_Pi_art.flatten().tolist()
-                    self.pub_cmdVelFlipperSpace.publish(m)     
-                    print(m)"""
-
-
-
+                    #print(m)
 
 
 
@@ -508,16 +460,21 @@ class NodeClass():
 
     def srvcllbck_setPoseSetPoint(self, req):
         ''' Service callback method for redefining the pose set-point given 
-        two 3D vectors (translation + orientation in euler-XYZ'''
-        # setting new set-point
-        self.dq_sp = trAndOri2dq(list(req.translation), rpy2quat(np.deg2rad(list(req.orientation))), 'trfirst')
+        two 3D vectors (translation [m] + orientation in euler-RPY [rad]'''
+        # updating set-point variables
+        self.x_sp_ori_q, self.x_sp_dq  = self.convertSetPoints2DqFormat(list(req.translation), list(req.orientation))
         return True
 
 
     def srvcllbck_setPoseCtrlGain(self, req):
         '''Service that sets the controller gains'''
-        self.kp_tr = req.kp_tr
-        self.kp_rot = req.kp_ori
+
+        # orientation controller gain in quaternion format
+        self.kp_o_q = np.quaternion(1, req.kp_ori[0], req.kp_ori[1], req.kp_ori[2])
+
+        # articulation  controller gain in dual quaternion format
+        self.kp_a_dq = DQ(1, req.kp_ori[0], req.kp_ori[1], req.kp_ori[2], 1, req.kp_tr[0], req.kp_tr[1], req.kp_tr[2])  
+
         return True
     
 
@@ -525,15 +482,40 @@ class NodeClass():
         ''' Service callback method for retrieving the pose set-point given 
         two 3D vectors (translation + orientation in euler-XYZ'''
         # setting new set-point
-        return [dqExtractTransV3(self.dq_sp).reshape(1,3).tolist()[0] ,dq2rpy(self.dq_sp)]
+        return [dqExtractTransV3(self.x_sp_dq ).reshape(1,3).tolist()[0] ,dq2rpy(self.x_sp_dq)]
     
 
     def srvcllbck_getPoseCtrlGain(self, req):
         '''Service that gets controller gains'''
-        return [self.kp_tr, self.kp_rot]
+        aux = self.kp_a_dq.vec8().tolist()
+        return [aux[1:4], aux[5:]]
     
 
-    def srvcllbck_setCtrlType(self, req):        pass
+    def srvcllbck_setCtrlType(self, req):
+        ''' Callback for changing current control type'''
+        # preparing the response
+        resp = SetIntResponse()
+
+        # confirming if the requested control type is a valid one
+        if req.value >= 1 and req.value <= len(self.chassisCtrlType):
+            self.ctrlType_curr = req.value
+            resp.ret = self.ctrlType_curr 
+            rospy.loginfo('[%s] Setting control type to: %s.', self.node_name, self.get_key_by_value(self.chassisCtrlType, self.ctrlType_curr))
+
+        # in case of the received control mode is unavailable
+        else:
+            resp.ret = -1
+            rospy.logerr('[%s] Received a bad control type: %s.', self.node_name, req.value)
+
+        return resp
+
+
+    def srvcllbck_getCtrlType(self, req):
+        ''' Callback to inform the current control type'''
+        ret = GetIntResponse()
+        ret.ret = int(self.ctrlType_curr)
+        return ret
+       
 
     #=== Static methods
     @staticmethod
@@ -564,6 +546,15 @@ class NodeClass():
         pose_dq = trAndOri2dq(tr, ori_q, 'trfirst')
 
         return ori_q, pose_dq
+
+
+    @staticmethod
+    def get_key_by_value(dictionary, value):
+        ''' Gets the key of a dictionary given a value'''
+        for key, val in dictionary.items():
+            if val == value:
+                return key
+        return None  # Value not found
 
 
 
