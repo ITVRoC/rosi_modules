@@ -37,7 +37,7 @@ class NodeClass():
 
         #----------------- CONTROL GAINS ------------------------------
         # orientation controller gain per DOF
-        kp_rot_v = [4.0, 8.0, 1.0]
+        kp_rot_v = [2.0, 4.0, 1.0]
 
         # translation control gain per DOF
         kp_tr_v = [1.0, 1.0, 0.8]
@@ -52,8 +52,8 @@ class NodeClass():
 
         #---- Divers
         # imu orientation rotation  correction
-        aux_imu_correct = rpy2quat(np.deg2rad([0, 0, 0]))
-        self.q_imu_correct = np.quaternion(aux_imu_correct[0], aux_imu_correct[1], aux_imu_correct[2], aux_imu_correct[3]) 
+        aux_imu_correct = rpy2quat(np.deg2rad([0, 0, 180]))
+        self.q_imu_offset = np.quaternion(aux_imu_correct[0], aux_imu_correct[1], aux_imu_correct[2], aux_imu_correct[3]) 
 
         # rosi direction side
         self.drive_side_param_path = '/rosi/forward_side'
@@ -160,7 +160,7 @@ class NodeClass():
                     q_imu = np.quaternion(self.msg_imu.orientation.w, self.msg_imu.orientation.x, self.msg_imu.orientation.y, self.msg_imu.orientation.z)
 
                     # correcting imu physical missorientation
-                    q_imu_corrected = q_imu*self.q_imu_correct
+                    q_imu_corrected = q_imu * self.q_imu_offset
 
                     # computing the chassis orientation without the yaw component
                     rpy = quat2rpy(q_imu_corrected)
