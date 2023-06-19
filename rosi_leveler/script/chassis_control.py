@@ -159,11 +159,11 @@ class NodeClass():
 
                     # computing the chassis orientation without the yaw component
                     rpy = quat2rpy(q_imu)
-                    q_yawcorr = rpy2quat([0, 0, -rpy[2]])
+                    q_yawcorr = rpy2quat([0, 0, rpy[2]])
                     q_yawcorr = np.quaternion(q_yawcorr[0], q_yawcorr[1], q_yawcorr[2], q_yawcorr[3])
                     x_o_R_q = q_imu * q_yawcorr
 
-            
+
                     #=== Control modes implementation
                     # If the control mode is orientation
                     if self.ctrlType_curr == self.chassisCtrlType['orientation'] or self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace']:
