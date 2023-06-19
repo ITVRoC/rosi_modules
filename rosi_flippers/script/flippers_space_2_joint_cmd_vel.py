@@ -66,7 +66,7 @@ class NodeClass():
 
         #sub_cmdVelFlpSpace = rospy.Subscriber('/rosi/flippers/space/cmd_vel', Vector3ArrayStamped, self.cllbck_cmdVelFlpSpace)
         sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
-        sub_imu = rospy.Subscriber('/mti/sensor/imu', Imu, self.cllbck_imu)
+        sub_imu = rospy.Subscriber('/sensor/imu_corrected', Imu, self.cllbck_imu)
 
         # services
         srv_getStatus = rospy.Service(self.ns.getSrvPath('getNodeStatus', rospy), GetNodeStatusList, self.srvcllbck_getStatus)

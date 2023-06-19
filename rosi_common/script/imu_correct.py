@@ -39,7 +39,7 @@ class NodeClass():
         ##=== ROS interfaces
 
         # publishers
-        self.pub_imu = rospy.Publisher('/sensor/imu', Imu, queue_size=5)
+        self.pub_imu = rospy.Publisher('/sensor/imu_corrected', Imu, queue_size=5)
 
         # subscribers
         sub_imu = rospy.Subscriber('/mti/sensor/imu', Imu, self.cllbck_imu)

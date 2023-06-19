@@ -61,7 +61,7 @@ class NodeClass():
         # subscribers
         sub_flpTouchState = rospy.Subscriber('/rosi/flippers/status/touching_ground', Int8ArrayStamped, self.cllbck_flpTouchState)
         sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
-        sub_imu = rospy.Subscriber('/mti/sensor/imu', Imu, self.cllbck_imu)
+        sub_imu = rospy.Subscriber('/sensor/imu_corrected', Imu, self.cllbck_imu)
 
         # services
         srv_setActive = rospy.Service(self.ns.getSrvPath('active', rospy), SetNodeStatus, self.srvcllbck_setActive)

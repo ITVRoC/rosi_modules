@@ -1,6 +1,9 @@
 <launch>
 
-     <!-- running the rosi_joy joy_base_cmdVel node -->
+    <!-- Imu orientation correction node -->
+    <node name="imu_correct" pkg="rosi_common" type="imu_correct.py" respawn="true" />
+
+    <!-- running the rosi_joy joy_base_cmdVel node -->
     <node name="joy_base_cmdVel" pkg="rosi_joy" type="joy_base_cmdVel.py" respawn="true" />
 
     <!-- running the base_cmdVel_sum rosi_space_to_traction_cmd_vel node -->

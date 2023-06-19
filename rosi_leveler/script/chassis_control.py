@@ -51,9 +51,6 @@ class NodeClass():
         self.kmu_l = 4*[0.3]
 
         #---- Divers
-        # imu orientation rotation  correction
-        aux_imu_correct = rpy2quat(np.deg2rad([0, 0, -90]))
-        self.q_imu_offset = np.quaternion(aux_imu_correct[0], aux_imu_correct[1], aux_imu_correct[2], aux_imu_correct[3]) 
 
         # rosi direction side
         self.drive_side_param_path = '/rosi/forward_side'
@@ -118,7 +115,7 @@ class NodeClass():
         #self.pub_ctrlGain = rospy.Publisher('/rosi/base/pose_reg/ctrl_gain', TwistStamped, queue_size=5)
 
         # subscribers
-        sub_imu = rospy.Subscriber('/mti/sensor/imu', Imu, self.cllbck_imu)
+        sub_imu = rospy.Subscriber('/sensor/imu_corrected', Imu, self.cllbck_imu)
         sub_grndDist = rospy.Subscriber('/rosi/model/base_ground_distance', Vector3ArrayStamped, self.cllbck_grndDist)
         sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
 
@@ -160,14 +157,11 @@ class NodeClass():
                     # setting the imu ROS data in the numpy quaternion format
                     q_imu = np.quaternion(self.msg_imu.orientation.w, self.msg_imu.orientation.x, self.msg_imu.orientation.y, self.msg_imu.orientation.z)
 
-                    # correcting imu physical missorientation
-                    q_imu_corrected = q_imu * self.q_imu_offset
-
                     # computing the chassis orientation without the yaw component
-                    rpy = quat2rpy(q_imu_corrected)
+                    rpy = quat2rpy(q_imu)
                     q_yawcorr = rpy2quat([0, 0, -rpy[2]])
                     q_yawcorr = np.quaternion(q_yawcorr[0], q_yawcorr[1], q_yawcorr[2], q_yawcorr[3])
-                    x_o_R_q = q_imu_corrected * q_yawcorr
+                    x_o_R_q = q_imu * q_yawcorr
 
             
                     #=== Control modes implementation
