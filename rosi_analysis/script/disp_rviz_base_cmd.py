@@ -10,7 +10,7 @@ from sensor_msgs.msg import Imu, JointState
 from visualization_msgs.msg import Marker, MarkerArray
 
 from rosi_common.tf_tools import BroadcastRvizTransform, BroadcastRvizVector, listColors, BroadcastRvizMesh
-from rosi_common.dq_tools import removeYaw, trAndOri2dq, angleAxis2dqRot, imuROSData2dq
+from rosi_common.dq_tools import removeYaw, trAndOri2dq, angleAxis2dqRot, imuROSData2dq, rpy2quat
 from rosi_common.rosi_tools import correctFlippersJointSignal, jointStateData2dict
 
 from rosi_model.rosi_description import dq_base_piFlp
@@ -31,21 +31,45 @@ class NodeClass():
         self.ang_vec_height = 0.05
 
         ##=== Meshes pose correction
-        #self.mesh_poseOffset_base = {'px': 0.0, 'py': 0.0, 'pz': -0.1, 'qw': 0.5, 'qx': 0.5,'qy': 0.5,'qz': 0.5}
-        self.mesh_poseOffset_base = {'px': -0.39, 'py': -0.2, 'pz': -0.17, 'qw': 0.5, 'qx': 0.5,'qy': 0.5,'qz': 0.5}
 
-        self.mesh_poseOffset_flippers = {
-                                'fl': {'px': 0.0, 'py': 0.0, 'pz': 0.0, 'qw': 0.7071, 'qx': 0.0,'qy': 0.0,'qz': -0.7071},
-                                'fr': {'px': 0.0, 'py': 0.0, 'pz': 0.0, 'qw': 0.7071, 'qx': 0.0,'qy': 0.0,'qz': -0.7071},
-                                'rl': {'px': 0.0, 'py': 0.0, 'pz': 0.0, 'qw': 0.7071, 'qx': 0.0,'qy': 0.0,'qz': -0.7071},
-                                'rr': {'px': 0.0, 'py': 0.0, 'pz': 0.0, 'qw': 0.7071, 'qx': 0.0,'qy': 0.0,'qz': -0.7071}
-        }
+        #-- base mesh offset
+        #offset_base_tr = [-0.39520, -0.1950, -0.07]
+        offset_base_tr = [-0.3920, -0.1950, -0.07]
+        offset_base_rpy = np.deg2rad([90.0, 0.0, 90.0])
 
+        #--- flp1 mesh offset
+        offset_flp1_tr = [0.0, 0.0, 0.0]
+        offset_flp1_rpy = np.deg2rad([0.0, 0.0, 0.0])
+
+        #--- flp2 mesh offset
+        offset_flp2_tr = [0.0, 0.0, 0.0]
+        offset_flp2_rpy = np.deg2rad([0.0, 0.0, 0.0])
+
+        #--- flp3 mesh offset
+        offset_flp3_tr = [0.0, 0.0, 0.0]
+        offset_flp3_rpy = np.deg2rad([0.0, 0.0, 0.0])
+
+        #--- flp4 mesh offset
+        offset_flp3_tr = [0.0, 0.0, 0.0]
+        offset_flp3_rpy = np.deg2rad([0.0, 0.0, 0.0])
+
+       
         ##=== Useful variables
         self.msg_baseSpaceCmdVel = None
         self.dq_world_base = None
         self.p_grnd = None
         self.flpJointState = None
+
+        ##=== One time calculations
+
+        # generating meshes ofsset dictionaries
+        self.mesh_poseOffset_base = self.getMeshOffset(offset_base_tr, offset_base_rpy)
+        self.mesh_poseOffset_flippers = {
+                                'fl': self.getMeshOffset(offset_flp1_tr, offset_flp1_rpy),
+                                'fr': self.getMeshOffset(offset_flp1_tr, offset_flp1_rpy),
+                                'rl': self.getMeshOffset(offset_flp1_tr, offset_flp1_rpy),
+                                'rr': self.getMeshOffset(offset_flp1_tr, offset_flp1_rpy)
+        }
 
 
         ##=== ROS interfaces
@@ -99,7 +123,7 @@ class NodeClass():
                 # dual-quaternion of frame Qi w.r.t. Pi (its a rotation around z of the flipper joint value)
                 _,joint_state = jointStateData2dict(self.flpJointState)
                 flp_pos = correctFlippersJointSignal(joint_state['pos'])
-                dq_pi_qi = [angleAxis2dqRot(jointPos, [0,0,1]) for jointPos in flp_pos] # rotation between Pi and Qi is always about z axis
+                dq_pi_qi = [angleAxis2dqRot(jointPos, [0,1,0]) for jointPos in flp_pos] # rotation between Pi and Qi is always about y axis
 
 
                 ##=== Treating variables
@@ -169,6 +193,18 @@ class NodeClass():
         ''' Callback for flippers state'''
         self.flpJointState = msg
 
+
+    @staticmethod
+    def getMeshOffset(tr, rpy):
+        ''' Creates an offset dictionary based on translation and rpy vectors
+        Input:
+            - tr <list/np.array>: the translation offset
+            - rpy <list/np.array>: the roll/pitch/yaw offset
+        Output: <dict> the offset dictionary
+        '''
+        rpy = rpy2quat(rpy)
+        return  {'px': tr[0], 'py': tr[1], 'pz': tr[2], 'qw': rpy[0], 'qx': rpy[1], 'qy': rpy[2],'qz': rpy[3]}
+    
 
 if __name__ == '__main__':
     node_name = 'disp_rviz_base_cmd'

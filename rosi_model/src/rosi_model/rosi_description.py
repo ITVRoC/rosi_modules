@@ -17,10 +17,10 @@ propKeys = ('fl', 'fr', 'rl', 'rr')
 ##=== Frame Pi (flipper propellants) w.r.t. frame R (Rosi Base)
 '''Dual-quaternion of flipper propellants frame w.r.t. base frame'''
 dq_base_piFlp = {
-    'fl': trAndOri2dq([0.3920, 0.1950, 0], [1, 0, 0, 0], 'trfirst'),
-    'fr': trAndOri2dq([0.3920, -0.1950, 0], [1, 0, 0, 0], 'trfirst'),
-    'rl': trAndOri2dq([-0.3920, 0.1950, 0], [1, 0, 0, 0], 'trfirst'),
-    'rr': trAndOri2dq([-0.3920, -0.1950, 0], [1, 0, 0, 0], 'trfirst')
+    'fl': trAndOri2dq([0.315, 0.1950, 0], [1, 0, 0, 0], 'trfirst'),
+    'fr': trAndOri2dq([0.315, -0.1950, 0], [1, 0, 0, 0], 'trfirst'),
+    'rl': trAndOri2dq([-0.315, 0.1950, 0], [1, 0, 0, 0], 'trfirst'),
+    'rr': trAndOri2dq([-0.315, -0.1950, 0], [1, 0, 0, 0], 'trfirst')
 }
 
 '''Rotation Matrix of propellants frame w.r.t. base frame'''

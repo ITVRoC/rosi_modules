@@ -18,7 +18,7 @@
 
     <!-- For choosing when to launch rviz display modules -->
     <!-- possible values are "true", "false"-->
-    <arg name="rviz_disp" default="false" />
+    <arg name="rviz_disp" default="true" />
 
     <!-- For enabling kinova gen3 driver -->
     <!-- possible values are "true", "false"-->

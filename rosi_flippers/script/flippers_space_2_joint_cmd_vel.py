@@ -59,7 +59,7 @@ class NodeClass():
 
         # publishers
         #self.pub_cmdVelFlipperSpace = rospy.Publisher('/rosi/flippers/space/cmd_v_z', Float32MultiArray, queue_size=5)
-        self.pub_cmdVelFlpJnt = rospy.Publisher('/rosi/flippers/joint/cmd_vel/leveler', Float32Array)
+        self.pub_cmdVelFlpJnt = rospy.Publisher('/rosi/flippers/joint/cmd_vel/leveler', Float32Array, queue_size=5)
 
         # subscribers
         sub_cmdVel_cmdVelVzPi = rospy.Subscriber('/rosi/flippers/space/cmd_v_z', Float32Array, self.cllbck_cmdVelVzPi)
