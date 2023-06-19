@@ -66,5 +66,4 @@
     <!-- running the rosi_joy joy_main_manager node -->
     <node name="joy_main_manager" pkg="rosi_joy" type="joy_main_manager.py" respawn="true" />
 
-
 </launch>

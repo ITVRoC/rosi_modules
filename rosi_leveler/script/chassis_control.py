@@ -13,7 +13,7 @@ from rosi_common.rosi_tools import correctFlippersJointSignal, compute_J_ori_dag
 from rosi_common.node_status_tools import nodeStatus
 from rosi_model.rosi_description import tr_base_piFlp
 
-from rosi_common.msg import Float32Array, Vector3ArrayStamped
+from rosi_common.msg import Float32Array, Vector3ArrayStamped, DualQuaternionStamped
 from sensor_msgs.msg import Imu, JointState
 
 from rosi_common.srv import SetNodeStatus, GetNodeStatusList, setPoseSetPointVec, setPoseCtrlGain, getPoseCtrlGain, getPoseSetPointVec, SetInt, SetIntResponse, GetInt, GetIntResponse
@@ -108,11 +108,11 @@ class NodeClass():
         ##==== ROS interfaces
         # publishers
         self.pub_cmdVelFlipperSpace = rospy.Publisher('/rosi/flippers/space/cmd_v_z/leveler', Float32Array, queue_size=5)
-        #self.pub_imuCtrlSig = rospy.Publisher('/rosi/base/space/cmd_vel/ctrl_signal', TwistStamped, queue_size=5)
-        #self.pub_dqError = rospy.Publisher('/rosi/base/pose_reg/de_o_R_qrror', DualQuaternionStamped, queue_size=5)
-        #self.pub_dqSetPoint = rospy.Publisher('/rosi/base/pose_reg/set_point', DualQuaternionStamped, queue_size=5)
-        #self.pub_dqPoseCurr = rospy.Publisher('/rosi/base/pose', DualQuaternionStamped, queue_size=5)
-        #self.pub_ctrlGain = rospy.Publisher('/rosi/base/pose_reg/ctrl_gain', TwistStamped, queue_size=5)
+
+        self.pub_dqPoseCurr = rospy.Publisher('/chassis_control/pose_current', DualQuaternionStamped, queue_size=5)
+        self.pub_dqSetPoint = rospy.Publisher('/chassis_control/pose_sp', DualQuaternionStamped, queue_size=5)
+        self.pub_dqError = rospy.Publisher('/chassis_control/pose_error', DualQuaternionStamped, queue_size=5)
+        self.pub_dqSP = rospy.Publisher('/chassis_control/sp_dq', DualQuaternionStamped, queue_size=5)
 
         # subscribers
         sub_imu = rospy.Subscriber('/sensor/imu_corrected', Imu, self.cllbck_imu)
@@ -157,11 +157,14 @@ class NodeClass():
                     # setting the imu ROS data in the numpy quaternion format
                     q_imu = np.quaternion(self.msg_imu.orientation.w, self.msg_imu.orientation.x, self.msg_imu.orientation.y, self.msg_imu.orientation.z)
 
-                    # computing the chassis orientation without the yaw component
+                    # computing the chassis orientation state without the yaw component
                     rpy = quat2rpy(q_imu)
                     q_yawcorr = rpy2quat([0, 0, rpy[2]])
                     q_yawcorr = np.quaternion(q_yawcorr[0], q_yawcorr[1], q_yawcorr[2], q_yawcorr[3])
                     x_o_R_q = q_imu * q_yawcorr
+
+                    # defining the articulation pose state
+                    x_a_R_dq = trAndOri2dq([0, 0, self.msg_grndDist.vec[0].z], x_o_R_q, 'trfirst')
 
 
                     #=== Control modes implementation
@@ -195,9 +198,6 @@ class NodeClass():
                     # If the control mode is articulation
                     elif self.ctrlType_curr == self.chassisCtrlType['articulation']:
 
-                        # defining the articulation pose 
-                        x_a_R_dq = trAndOri2dq([0, 0, self.msg_grndDist.vec[0].z], x_o_R_q, 'trfirst')
-
                         # computing the pose error
                         e_a_R_dq = self.x_sp_dq .conj() * x_a_R_dq
 
@@ -219,7 +219,7 @@ class NodeClass():
                         u_Pi_v = np.array([0, 0, 0, 0]).reshape(4,1)
                     
 
-                    #=== Publishing the ROS message
+                    #=== Publishing the ROS message for the controller
                     # receiving ROS time
                     ros_time = rospy.get_rostime()
 
@@ -235,6 +235,30 @@ class NodeClass():
                     #print(m)
 
 
+                    #=== Publishing control metrics
+
+                    #current pose
+                    m = self.dq2DualQuaternionStampedMsg(x_a_R_dq, ros_time, self.node_name)
+                    self.pub_dqPoseCurr.publish(m)
+
+                    # pose set-point
+                    m = self.dq2DualQuaternionStampedMsg(self.x_sp_dq, ros_time, self.node_name)
+                    self.pub_dqSetPoint.publish(m)
+
+                    # pose error
+                    if self.ctrlType_curr == self.chassisCtrlType['orientation'] or self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace']:
+                        # creates the dual quaternion error if it still does not exists (in case of orientation control)
+                        aux = e_o_R_q.components
+                        e_a_R_dq = DQ(aux[0], aux[1], aux[2], aux[3], 0, 0, 0, 0)
+                    m = self.dq2DualQuaternionStampedMsg(e_a_R_dq, ros_time, self.node_name)
+                    self.pub_dqError.publish(m)
+
+                    # controller gain
+                    m = self.dq2DualQuaternionStampedMsg(self.kp_a_dq , ros_time, self.node_name)
+                    self.pub_dqSP.publish(m)
+                    
+                    
+                    
 
                     """# extracting flippers needed data
                     _,joint_state = jointStateData2dict(self.flpJointState)
@@ -551,6 +575,27 @@ class NodeClass():
                 return key
         return None  # Value not found
 
+
+    @staticmethod
+    def dq2DualQuaternionStampedMsg(dq, ros_time, frame_id):
+        '''Converts a dual-quaternion variable into a ROS DualQuaternionStamped message
+        Input
+            - dq<DQ>: the dual quaternion variable
+        Output
+            - an object <DualQuaternionStamped> as a ROS message.'''
+        aux = dq.vec8()
+        m = DualQuaternionStamped()
+        m.header.stamp = ros_time
+        m.header.frame_id = frame_id
+        m.wp = aux[0]
+        m.xp = aux[1]
+        m.yp = aux[2]
+        m.zp = aux[3]
+        m.wd = aux[4]
+        m.xd = aux[5]
+        m.yd = aux[6]
+        m.zd = aux[7]
+        return m
 
 
 if __name__ == '__main__':
