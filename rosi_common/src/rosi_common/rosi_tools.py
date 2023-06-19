@@ -63,6 +63,14 @@ def correctFlippersJointSignal(d_in):
     return np.multiply(d_in, correction)
 
 
+def correctFlippersJointSignal2(d_in):
+    ''' Correct rosi joints signal after the correction of flipper frames orientation.
+    Created a version 2 of this method and maintaned the last for legacy purporses.
+    '''
+    correction = np.array([1, 1, -1, -1])
+    return np.multiply(d_in, correction)
+
+
 def correctTractionJointSignal(d_in):
     ''' Correct rosi Traction joints signal
         This modelling considers that positive traction joints velocities makes

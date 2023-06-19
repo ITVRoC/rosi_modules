@@ -11,7 +11,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 from rosi_common.tf_tools import BroadcastRvizTransform, BroadcastRvizVector, listColors, BroadcastRvizMesh
 from rosi_common.dq_tools import removeYaw, trAndOri2dq, angleAxis2dqRot, imuROSData2dq, rpy2quat
-from rosi_common.rosi_tools import correctFlippersJointSignal, jointStateData2dict
+from rosi_common.rosi_tools import correctFlippersJointSignal2, jointStateData2dict
 
 from rosi_model.rosi_description import dq_base_piFlp
 
@@ -39,19 +39,19 @@ class NodeClass():
 
         #--- flp1 mesh offset
         offset_flp1_tr = [0.0, 0.0, 0.0]
-        offset_flp1_rpy = np.deg2rad([0.0, 0.0, 0.0])
+        offset_flp1_rpy = np.deg2rad([90.0, 0.0, 180.0])
 
         #--- flp2 mesh offset
         offset_flp2_tr = [0.0, 0.0, 0.0]
-        offset_flp2_rpy = np.deg2rad([0.0, 0.0, 0.0])
+        offset_flp2_rpy = np.deg2rad([90.0, 0.0, 0.0])
 
         #--- flp3 mesh offset
         offset_flp3_tr = [0.0, 0.0, 0.0]
-        offset_flp3_rpy = np.deg2rad([0.0, 0.0, 0.0])
+        offset_flp3_rpy = np.deg2rad([90.0, 0.0, 180.0])
 
         #--- flp4 mesh offset
-        offset_flp3_tr = [0.0, 0.0, 0.0]
-        offset_flp3_rpy = np.deg2rad([0.0, 0.0, 0.0])
+        offset_flp4_tr = [0.0, 0.0, 0.0]
+        offset_flp4_rpy = np.deg2rad([90.0, 0.0, 0.0])
 
        
         ##=== Useful variables
@@ -66,9 +66,9 @@ class NodeClass():
         self.mesh_poseOffset_base = self.getMeshOffset(offset_base_tr, offset_base_rpy)
         self.mesh_poseOffset_flippers = {
                                 'fl': self.getMeshOffset(offset_flp1_tr, offset_flp1_rpy),
-                                'fr': self.getMeshOffset(offset_flp1_tr, offset_flp1_rpy),
-                                'rl': self.getMeshOffset(offset_flp1_tr, offset_flp1_rpy),
-                                'rr': self.getMeshOffset(offset_flp1_tr, offset_flp1_rpy)
+                                'fr': self.getMeshOffset(offset_flp2_tr, offset_flp2_rpy),
+                                'rl': self.getMeshOffset(offset_flp3_tr, offset_flp3_rpy),
+                                'rr': self.getMeshOffset(offset_flp4_tr, offset_flp4_rpy)
         }
 
 
@@ -122,7 +122,7 @@ class NodeClass():
 
                 # dual-quaternion of frame Qi w.r.t. Pi (its a rotation around z of the flipper joint value)
                 _,joint_state = jointStateData2dict(self.flpJointState)
-                flp_pos = correctFlippersJointSignal(joint_state['pos'])
+                flp_pos = correctFlippersJointSignal2(joint_state['pos'])
                 dq_pi_qi = [angleAxis2dqRot(jointPos, [0,1,0]) for jointPos in flp_pos] # rotation between Pi and Qi is always about y axis
 
 

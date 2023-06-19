@@ -4,7 +4,7 @@
     <!-- node name="disp_rviz_base_cmd" pkg="rosi_analysis" type="disp_rviz_base_cmd.py" respawn="true" / -->
 
     <!-- running the contact point node-->
-    <!-- node name="disp_rviz_cntct_pln" pkg="rosi_analysis" type="disp_rviz_cntct_pln.py" respawn="true" / -->
+    <node name="disp_rviz_cntct_pln" pkg="rosi_analysis" type="disp_rviz_cntct_pln.py" respawn="true" />
 
     <!-- running the gen3 rviz display plot -->
     <!-- node name="disp_rviz_gen3" pkg="rosi_analysis" type="disp_rviz_gen3.py" respawn="true" / -->
