@@ -86,7 +86,7 @@ class NodeClass():
         # subscribers
         sub_baseSpaceCmdVel = rospy.Subscriber('/rosi/base/space/cmd_vel', TwistStamped, self.cllbck_baseSpaceCmdVel)
         sub_grndDist = rospy.Subscriber('/rosi/model/base_ground_distance', Vector3ArrayStamped, self.cllbck_grndDist)
-        sub_imu = rospy.Subscriber('/mti/sensor/imu', Imu, self.cllbck_imu) 
+        sub_imu = rospy.Subscriber('/sensor/imu_corrected', Imu, self.cllbck_imu) 
         sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
 
         ##=== Node main method

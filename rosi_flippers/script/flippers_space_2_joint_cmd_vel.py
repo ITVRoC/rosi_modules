@@ -126,6 +126,7 @@ class NodeClass():
                         mp.header.frame_id = 'flippers_space_2_joint_cmd_vel'
                         mp.data = dotq_fl_l
                         self.pub_cmdVelFlpJnt.publish(mp)
+                        print(mp)
 
             # sleeps the node
             node_rate_sleep.sleep()
