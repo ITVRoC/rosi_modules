@@ -123,7 +123,7 @@ class NodeClass():
                 m.modes = self.pubModesDefault
                 m.data = [0.0]*4 + np.ndarray.tolist(correctFlippersJointSignal(cmd_flprs))
                 self.pub_cmdVelFlpJointSafety.publish(m)
-                #print(m)
+                print(m)
 
 
             if self.ns.getNodeStatus()['telemetry']: # only runs if node has telemetry enabled

@@ -1,0 +1,9 @@
+<launch>
+
+    <!-- running the rosi mind node -->
+    <node name="controller_cmd_req" pkg="rosi_common" type="controller_cmd_req.py" respawn="true" />
+
+    <!-- running the rosi_joy joy_base_cmdVel node -->
+    <!-- node name="traction_vel_calibration" pkg="rosi_testing" type="traction_vel_calibration.py" respawn="true" / -->
+
+</launch>

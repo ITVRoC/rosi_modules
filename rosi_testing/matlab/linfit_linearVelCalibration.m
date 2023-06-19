@@ -4,12 +4,12 @@
 clear all;
 clc;
 close all;
-addpath('../output/');
+addpath('../output/rosi_vicon');
 
 %% Parameters
 
 % file to read
-fileName = 'rosiSim_2022-11-02_14-45-42.csv';
+fileName = '2023-06-19_19-50-20.csv';
 
 % polynomial degree
 polyDeg = 1;

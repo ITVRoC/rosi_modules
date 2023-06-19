@@ -11,7 +11,7 @@ import rospy
 
 from controller.msg import Control
 from sensor_msgs.msg import JointState
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import TransformStamped
 
 from rosi_common.rosi_tools import jointStateData2dict, ctrlType, correctTractionJointSignal
 
@@ -31,10 +31,10 @@ class NodeClass():
         # time to apply each joint velocity command
         self.timeToApplySingleCommand = rospy.Duration.from_sec(4) # in seconds
 
-        # minimal joint speed to test
+        # min joint speed to test
         jointSpeedMin = 0.1
 
-        # minimal joint speed to test
+        # max joint speed to test
         jointSpeedMax = 4
 
         # number of points to test
@@ -44,12 +44,16 @@ class NodeClass():
         jointSpeedTetstResolution = 0.2
 
         # file name to save
-        saveFileBaseName = 'rosiSim'
+        test_name = 'rosi_vicon'
 
         ##=== Useful variables
+        self.tractionJointState_msg = None
+        self.basePoseGT_msg = None
 
-        self.tractionJointState = None
-        self.baseLinVel = None
+
+        # publishing useful variables
+        self.m_null4Array = 4 * [0.0]
+        self.m_modes = [ctrlType["Velocity"]]*4 + [ctrlType["Unchanged"]]*4
 
         # creating test joint speed lin space
         self.testJointVel_l = np.ndarray.tolist(np.linspace(jointSpeedMin, jointSpeedMax, nPoints))
@@ -62,10 +66,10 @@ class NodeClass():
         now = datetime.now()
         d = today.strftime("%Y-%m-%d")
         n = now.strftime("%H-%M-%S")
-        saveFileName = saveFileBaseName + '_' + d + '_' + n + '.csv'
+        saveFileName = d + '_' + n + '.csv'
 
          # directory to save results
-        saveDir = rospkg.RosPack().get_path('rosi_testing') + '/output/'
+        saveDir = rospkg.RosPack().get_path('rosi_testing') + '/output/' + test_name + '/'
 
         # savepath
         self.savePath = saveDir + saveFileName
@@ -84,7 +88,7 @@ class NodeClass():
         self.pub_cmdReq = rospy.Publisher('/rosi/controller/req_cmd', Control, queue_size=5)
 
         self.sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
-        self.sub_basePoseTwist = rospy.Subscriber('/rosi/cheat/pose_vel_rosi/twist', Twist, self.cllbck_basePoseTwist)
+        self.sub_basePoseGT = rospy.Subscriber('/vicon/rosi_base/rosi_base', TransformStamped, self.cllbck_basePoseGT)
 
         self.nodeMain()
 
@@ -98,7 +102,7 @@ class NodeClass():
         while not rospy.is_shutdown():
 
             # wait until valid messages has been received
-            if self.tractionJointState is not None and self.baseLinVel is not None:
+            if self.tractionJointState_msg is not None and self.basePoseGT_msg is not None:
 
                 result_l = []
                 velMod = -1 # alternating velocity modulus
@@ -106,13 +110,13 @@ class NodeClass():
                 # performing the test for each desired joint velocity to test
                 for jointVel in self.testJointVel_l:
 
-                    # applyed velocity alternates between positive and negative, so the robot does not go too far
+                    # applied velocity alternates between positive and negative, so the robot does not go too far
                     velMod = 1 if velMod==-1 else -1
 
                     # performing the test
                     res = self.performCalTest(velMod*jointVel, self.timeToApplySingleCommand, node_rate_sleep)
                     
-                    rospy.loginfo('Result for jvel: %f: linvel: %f'%(res[0],res[1]))
+                    rospy.loginfo('For jvel %s, the chassis avg lin spd is: %s', res[0], res[1])
                     rospy.loginfo('---------')
                     result_l.append(res)
 
@@ -134,24 +138,28 @@ class NodeClass():
 
     def cllbck_jointState(self, msg):
         '''Callback for the joint state message'''
-        self.tractionJointState,_ = jointStateData2dict(msg)
+        #self.tractionJointState,_ = jointStateData2dict(msg)
+        self.tractionJointState_msg = msg
 
 
-    def cllbck_basePoseTwist(self, msg):
+    def cllbck_basePoseGT(self, msg):
         '''Callback for the ROSI base twist'''
-        self.baseLinVel = {'x':msg.linear.x, 'y':msg.linear.y, 'z':msg.linear.z}
+        #self.baseLinVel = {'x':msg.linear.x, 'y':msg.linear.y, 'z':msg.linear.z}
+        self.basePoseGT_msg = msg
 
 
-    def applyTractionJointVel(self, jointVel):
+    def applyTractionJointVel(self, jointVel, ros_time):
         '''Method that receives a given jointVelocity and sends 
         commands to ROSI'''
+        
+        tr_vel = correctTractionJointSignal([jointVel]*4).tolist()
 
         m = Control()
-        m.header.stamp = rospy.get_rostime()
+        m.header.stamp = ros_time
         m.header.frame_id = 'traction_vel_calibration'
         m.originId = 0
-        m.modes = [ctrlType["Velocity"]]*4 + [ctrlType["Unchanged"]]*4
-        m.data = correctTractionJointSignal([jointVel]*4) + [0.0]*4
+        m.modes = self.m_modes
+        m.data = tr_vel + self.m_null4Array
         self.pub_cmdReq.publish(m)
 
 
@@ -160,34 +168,75 @@ class NodeClass():
         It receives a joint velocity as input. Performs it for a given time and then
         returns base linear velocity mean as output'''
         
+        # initial time
         time_ini = rospy.get_rostime()
-        dt = rospy.Duration(0)
+        test_time = rospy.Duration(0)
 
-        rospy.loginfo(f'Applying velocity %f'%jVel)
-        self.applyTractionJointVel(jVel)
+        # initial position
+        pos_ini = self.getPosCurr()
 
+        # applying the velocity
+        rospy.loginfo('Applying joint velocity: %s rad/s.', jVel)
+
+        # useful variables
+        delta_p_l = []
         linVel_l = []
+        time_l = []
 
-        while timeSpanToRun > dt:
+        # initializing last variables
+        pos_last = pos_ini
+        time_last = time_ini
 
-            # computing the linear velocity norm and appending value to a list
-            linVel = np.sqrt(pow(self.baseLinVel['x'],2) + pow(self.baseLinVel['y'],2) + pow(self.baseLinVel['z'],2))
+        # perfroming the experiment
+        while timeSpanToRun > test_time:
+
+            # applies current velocity
+            self.applyTractionJointVel(jVel, time_current)
+
+            # retrieving current ros time
+            time_current = rospy.get_rostime()
+
+            # obtaining the displacement norm
+            pos_current = self.getPosCurr()
+            delta_p_norm = np.linalg.norm(pos_current - pos_last)
+
+            # computing the delta time
+            dt = (time_current - time_last).to_sec()
+
+            # computing the velocity norm
+            linVel = delta_p_norm / dt
+
+            # updating tables
+            delta_p_l.append(delta_p_norm)
+            time_l.append(time_current)
             linVel_l.append(linVel)
 
-            # updating time has passed from test init
-            dt = rospy.get_rostime() - time_ini
+            # updating variables
+            pos_last = pos_current
+            time_last = time_current
+
+            # updating passed time since test init
+            test_time = time_current - time_ini
             node_rate_sleep.sleep()
 
         # stopping the robot
         rospy.loginfo('Stopping the robot')
-        self.applyTractionJointVel(0)
+        self.applyTractionJointVel(0, rospy.get_rostime())
         rospy.sleep(1.)
 
         # computing linVel average value
         linVel_av = sum(linVel_l) / len(linVel_l)
 
-        # returing test result
+        # returning test result
         return [abs(jVel), linVel_av]
+    
+    
+
+    def getPosCurr(self):
+        '''Returns the base position as a numpy array
+        Output
+            - a <nd.array> element with the chassis base position'''
+        return np.array([self.basePoseGT_msg.transform.translation.x, self.basePoseGT_msg.transform.translation.y,self.basePoseGT_msg.transform.translation.z])
 
 
 if __name__ == '__main__':
