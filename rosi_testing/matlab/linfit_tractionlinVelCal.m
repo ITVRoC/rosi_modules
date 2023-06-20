@@ -9,7 +9,7 @@ addpath('../output/rosi_vicon');
 %% Parameters
 
 % file to read
-fileName = '2023-06-20_14-47-12.csv';
+fileName = 'tracks.csv';
 
 % polynomial degree
 polyDeg = 1;

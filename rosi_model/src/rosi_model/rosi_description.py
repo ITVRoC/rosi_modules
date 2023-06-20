@@ -157,8 +157,8 @@ y = ax + b, where
                 x: traction joint velocity
                 y: base linear velocity'''
 coefs_baseLinVel_wrt_trJointSpeed_tracks = {
-    'a': 0.07373,
-    'b': 0.0000
+    'a': 0.0714,
+    'b': 0.0009
 }
 
 ''' polynomial coefficients of the function that receives angular traction joints velocities
@@ -167,7 +167,7 @@ y = ax + b, where
                 x: traction joint velocity
                 y: base linear velocity'''
 coefs_baseLinVel_wrt_trJointSpeed_wheels = {
-    'a': 0.1298,
+    'a': 0.1283,
     'b': 0.0000
 }
 
