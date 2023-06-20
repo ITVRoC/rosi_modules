@@ -108,16 +108,21 @@ class NodeClass():
                 velMod = -1 # alternating velocity modulus
 
                 # performing the test for each desired joint velocity to test
-                for jointVel in self.testJointVel_l:
+                for i, jointVel in enumerate(self.testJointVel_l):
 
                     # applied velocity alternates between positive and negative, so the robot does not go too far
                     velMod = 1 if velMod==-1 else -1
 
+                    # messages to the user
+                    rospy.loginfo('---------')
+                    rospy.loginfo('[stage %d/%d] Applying joint angular speed: %.2f.', i+1, len(self.testJointVel_l), jointVel)
+
                     # performing the test
                     res = self.performCalTest(velMod*jointVel, self.timeToApplySingleCommand, node_rate_sleep)
                     
-                    rospy.loginfo('For jvel %s, the chassis avg lin spd is: %s', res[0], res[1])
-                    rospy.loginfo('---------')
+                    # messages to the user
+                    rospy.loginfo('Chassis avg lin spd: %.2f', res[1])
+                    
                     result_l.append(res)
 
                 # saves final result to csv
@@ -167,16 +172,22 @@ class NodeClass():
         '''Performs a calibration test. 
         It receives a joint velocity as input. Performs it for a given time and then
         returns base linear velocity mean as output'''
-        
+
+        # applies the velocity to joints before starting measurement so motion enters in steady state.
+        rospy.loginfo('Applying joint velocity.')
+        f4_time_spent = rospy.Duration(0)
+        f4_time_ini = rospy.get_rostime()
+        while f4_time_spent < rospy.Duration(2):
+            self.applyTractionJointVel(jVel, rospy.get_rostime())
+            node_rate_sleep.sleep()
+            f4_time_spent = rospy.get_rostime() - f4_time_ini
+
         # initial time
         time_ini = rospy.get_rostime()
         test_time = rospy.Duration(0)
 
         # initial position
         pos_ini = self.getPosCurr()
-
-        # applying the velocity
-        rospy.loginfo('Applying joint velocity: %s rad/s.', jVel)
 
         # useful variables
         delta_p_l = []
@@ -188,13 +199,14 @@ class NodeClass():
         time_last = time_ini
 
         # perfroming the experiment
+        rospy.loginfo('Initiating measurement...')
         while timeSpanToRun > test_time:
-
-            # applies current velocity
-            self.applyTractionJointVel(jVel, time_current)
 
             # retrieving current ros time
             time_current = rospy.get_rostime()
+
+            # applies current velocity to traction joints
+            self.applyTractionJointVel(jVel, rospy.get_rostime())
 
             # obtaining the displacement norm
             pos_current = self.getPosCurr()
