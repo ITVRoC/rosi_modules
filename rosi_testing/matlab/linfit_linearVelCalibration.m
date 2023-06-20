@@ -9,18 +9,33 @@ addpath('../output/rosi_vicon');
 %% Parameters
 
 % file to read
-fileName = '2023-06-19_19-50-20.csv';
+fileName = '2023-06-20_14-47-12.csv';
 
 % polynomial degree
 polyDeg = 1;
 
 %% Executing
 
-% reading csv
+% reading csv data
 M = csvread(fileName);
+x_data = M(:,1);
+y_data = M(:,2);
 
 % performing the polyfit
-coefs = polyfit(M(:,1), M(:,2), polyDeg)
+coefs = polyfit(x_data, y_data, polyDeg)
+
+% calculate the predicted values using the fitted line
+y_pred = polyval(coefs, x_data);
+
+% Calculate the total sum of squares (TSS)
+mean_y = mean(y_data);
+tss = sum((y_data - mean_y).^2);
+
+% Calculate the residual sum of squares (RSS)
+rss = sum((y_data - y_pred).^2);
+
+% Calculate the coefficient of determination (R-squared)
+r_squared = 1 - (rss / tss)
 
 %% Plot
 figure;

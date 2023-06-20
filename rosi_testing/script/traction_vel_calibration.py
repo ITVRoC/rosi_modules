@@ -242,7 +242,6 @@ class NodeClass():
         # returning test result
         return [abs(jVel), linVel_av]
     
-    
 
     def getPosCurr(self):
         '''Returns the base position as a numpy array
