@@ -30,7 +30,7 @@ class NodeClass():
                 'joy_gen3',                  
                 'joy_flippers_cmdVel',   
                 'flippers_cmd_sum',  
-                #'rosi_to_traction_cmd_vel', 
+                'traction_cmd_sum',
                 'chassis_control' 
         )
 

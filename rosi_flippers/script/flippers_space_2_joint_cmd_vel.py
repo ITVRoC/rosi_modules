@@ -6,7 +6,7 @@ and converts it to flippers joyt rotational velocities.
 import rospy
 
 from std_msgs.msg import Float32MultiArray
-from rosi_common.msg import Float32Array
+from rosi_common.msg import Float32Array, Vector3ArrayStamped
 from sensor_msgs.msg import JointState, Imu
 
 import numpy as np
@@ -62,7 +62,7 @@ class NodeClass():
         self.pub_cmdVelFlpJnt = rospy.Publisher('/rosi/flippers/joint/cmd_vel/leveler', Float32Array, queue_size=5)
 
         # subscribers
-        sub_cmdVel_cmdVelVzPi = rospy.Subscriber('/rosi/flippers/space/cmd_v_z', Float32Array, self.cllbck_cmdVelVzPi)
+        sub_cmdVel_cmdVelVzPi = rospy.Subscriber('/rosi/flippers/space/cmd_v_z', Vector3ArrayStamped, self.cllbck_cmdVelVzPi)
 
         #sub_cmdVelFlpSpace = rospy.Subscriber('/rosi/flippers/space/cmd_vel', Vector3ArrayStamped, self.cllbck_cmdVelFlpSpace)
         sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
@@ -103,13 +103,14 @@ class NodeClass():
                     # TODO Verificar se o sinal de posicao dos flippers esta OK
 
                     # obtains flippers contact points
+                    # TODO Deve-se rotacionar primeiro o flipper pela orientacao do robo e depois pelo valor de sua junta. Isto eh importante quando o robo esta inclinado
                     c_f_l_Pi_l = flippersContactPoint(f_j_l['pos'], gxz)
 
                     # computes the flipper lever joint Jacobian for z axis
                     J_flpLever_z_l = [ compute_J_flpLever(rotm_qi_pi, c_f_l_Pi, 'z') for rotm_qi_pi,c_f_l_Pi in zip(self.rotm_qi_pi_l, c_f_l_Pi_l)]
 
                     # mounting velocity command vector for z_P
-                    v_P_z_l = [np.array([0, 0, vi]).reshape(3,1) for vi in self.v_z_P_l ]
+                    v_P_z_l = [np.array([p.x, p.y, p.z]).reshape(3,1) for p in self.v_z_P_l.vec]
 
                     # flippers joint angular velocity computed using the flipper jacobian
                     dotq_fl_l = correctFlippersJointSignal([np.dot(np.linalg.pinv(J_flpLever_z_i), v_P_z_i)[0][0] for J_flpLever_z_i, v_P_z_i in zip(J_flpLever_z_l, v_P_z_l) ] )
@@ -126,14 +127,13 @@ class NodeClass():
                         mp.header.frame_id = 'flippers_space_2_joint_cmd_vel'
                         mp.data = dotq_fl_l
                         self.pub_cmdVelFlpJnt.publish(mp)
-                        print(mp)
 
             # sleeps the node
             node_rate_sleep.sleep()
 
 
     def cllbck_cmdVelVzPi(self, msg):
-        self.v_z_P_l = msg.data
+        self.v_z_P_l = msg
 
 
     def cllbck_jointState(self, msg):

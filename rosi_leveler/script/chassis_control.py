@@ -51,6 +51,11 @@ class NodeClass():
         # mu function gain
         self.kmu_l = 4*[0.3]
 
+        #---- Clipping 
+        # value for clipping the command if it is to small (below the variable)
+        self.u_Pi_clip_threshold = 0.01
+
+
         #---- Divers
 
         # rosi direction side
@@ -218,6 +223,10 @@ class NodeClass():
                         u_Pi_v = np.array([0, 0, 0, 0]).reshape(4,1)
                     
 
+                    # clipping the command if it is below a threshold
+                    u_Pi_v = [u[0] if u[0] > self.u_Pi_clip_threshold else 0.0 for u in u_Pi_v]    
+
+
                     #=== Publishing the ROS message for the controller
                     # receiving ROS time
                     ros_time = rospy.get_rostime()
@@ -229,7 +238,7 @@ class NodeClass():
                     m = Vector3ArrayStamped()
                     m.header.stamp = ros_time
                     m.header.frame_id = self.node_name
-                    m.vec = [Vector3(0, 0, u_Pi[0]) for u_Pi in u_Pi_v]
+                    m.vec = [Vector3(0, 0, u_Pi) for u_Pi in u_Pi_v]
                     self.pub_cmdVelFlipperSpace.publish(m)     
 
 

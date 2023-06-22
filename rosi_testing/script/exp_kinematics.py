@@ -29,14 +29,14 @@ class NodeClass():
         ##=== Parameters
 
         # base velocities to apply
-        self.vl = [0.0, 0.0, 0.2]
-        self.va = [0.0, 0.0, 0.0]
+        self.vl = [0.0, 0.0, 0.0]
+        self.va = [0.0, 0.0, 0.5]
 
         # node rate sleep [Hz]
         self.p_rateSleep = 50
 
         # time to apply the command to the base
-        self.p_timeToApplyTwist = rospy.Duration.from_sec(3)
+        self.p_timeToApplyTwist = rospy.Duration.from_sec(5)
 
         # folder to save results
         test_name = 'kinematics'

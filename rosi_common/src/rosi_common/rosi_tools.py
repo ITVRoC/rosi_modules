@@ -265,7 +265,6 @@ def compute_J_traction(r, n_cp):
     '''Computes the Wheel/Flippers tracks Traction Jacobian matrix considering that the rotation is about the y_Pw axis.
     Input
         - r <float>: wheel/sprocket effective radius
-        - Rotm_Pi_Qi_l <list>: a list of rotation matrices <np.array> of frame {Qi} wrt {Pi}
         - n_cp <np.array>{3x1}: a 3D unit vector of the ground normal vector expressed in {Pi} frame 
     Output
         - Traction Jacobian <np.array>{ len(Rotm_R_Pi_l).3  x  1}

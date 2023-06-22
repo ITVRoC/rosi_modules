@@ -81,6 +81,7 @@ class NodeClass():
                 m.header.frame_id = self.node_name
                 m.vec = [Vector3(v[0], v[1], v[2]) for v in  cmd_v_z_sum]
                 self.pub_cmdVel_cmdVelVzPi.publish(m)
+                print(m)
 
 
     def cllbck_cmdVelVzPi_joy(self, msg): 
