@@ -15,6 +15,7 @@ from rosi_model.rosi_description import tr_base_piFlp
 
 from rosi_common.msg import Float32Array, Vector3ArrayStamped, DualQuaternionStamped
 from sensor_msgs.msg import Imu, JointState
+from geometry_msgs.msg import Vector3
 
 from rosi_common.srv import SetNodeStatus, GetNodeStatusList, setPoseSetPointVec, setPoseCtrlGain, getPoseCtrlGain, getPoseSetPointVec, SetInt, SetIntResponse, GetInt, GetIntResponse
 
@@ -107,7 +108,7 @@ class NodeClass():
 
         ##==== ROS interfaces
         # publishers
-        self.pub_cmdVelFlipperSpace = rospy.Publisher('/rosi/flippers/space/cmd_v_z/leveler', Float32Array, queue_size=5)
+        self.pub_cmdVelFlipperSpace = rospy.Publisher('/rosi/flippers/space/cmd_v_z/leveler', Vector3ArrayStamped, queue_size=5)
 
         self.pub_dqPoseCurr = rospy.Publisher('/chassis_control/pose_current', DualQuaternionStamped, queue_size=5)
         self.pub_dqSetPoint = rospy.Publisher('/chassis_control/pose_sp', DualQuaternionStamped, queue_size=5)
@@ -225,10 +226,10 @@ class NodeClass():
                     self.drive_side = rospy.get_param(self.drive_side_param_path)
 
                     # mounting and publishing
-                    m = Float32Array()
+                    m = Vector3ArrayStamped()
                     m.header.stamp = ros_time
                     m.header.frame_id = self.node_name
-                    m.data = u_Pi_v.flatten().tolist()
+                    m.vec = [Vector3(0, 0, u_Pi[0]) for u_Pi in u_Pi_v]
                     self.pub_cmdVelFlipperSpace.publish(m)     
 
 
