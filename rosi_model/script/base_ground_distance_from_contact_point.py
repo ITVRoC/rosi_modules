@@ -49,7 +49,7 @@ class NodeClass():
         ##=== ROS Interfaces
         # publishers
         self.pub_grndDist = rospy.Publisher('/rosi/model/base_ground_distance', Vector3ArrayStamped, queue_size=5)
-        self.pub_cntctPlnVec = rospy.Publisher('/rosi/model/contact_plane_normal_vec', Vector3ArrayStamped, queue_size=5)
+        self.pub_cntctPlnVec = rospy.Publisher('/rosi/model/contact_plane_normal_vec', Vector3Stamped, queue_size=5)
 
         # subscribers
         sub_cntctPnt = rospy.Subscriber('/rosi/model/contact_point_wrt_base', Vector3ArrayStamped, self.cllbck_cntctPnt)
@@ -116,7 +116,6 @@ class NodeClass():
                     m.vector = Vector3(n_cp[0][0], n_cp[1][0], n_cp[2][0])
                     self.pub_cntctPlnVec.publish(m)
             
-
             # sleeping the node
             node_rate_sleep.sleep()
 

@@ -10,7 +10,12 @@ from rosi_common.dq_tools import rotateVecByQua, angleAxis2qRot
 ''' -------------------'''
 ''' ---> Programming useful variables <---'''
 
-""" Control type modes for sending to rosi_controller ros nodelet """
+'''Base vectors'''
+x_axis = np.array([1, 0, 0]).reshape(3,1)
+y_axis = np.array([0, 1, 0]).reshape(3,1)
+z_axis = np.array([0, 0, 1]).reshape(3,1)
+
+''' Control type modes for sending to rosi_controller ros nodelet '''
 ctrlType = {
             "NotControlled": int(0),
             "Brake": int(1),
@@ -256,7 +261,7 @@ def compute_J_mnvy_dagger(tr_R_Pi_l):
 ''' -------------------'''
 ''' ---> PROPULSION KIN JACOBIANS <---'''
 
-def compute_J_traction(r, Rotm_Pi_Qi_l, n_cp):
+def compute_J_traction(r, n_cp):
     '''Computes the Wheel/Flippers tracks Traction Jacobian matrix considering that the rotation is about the y_Pw axis.
     Input
         - r <float>: wheel/sprocket effective radius
@@ -265,8 +270,11 @@ def compute_J_traction(r, Rotm_Pi_Qi_l, n_cp):
     Output
         - Traction Jacobian <np.array>{ len(Rotm_R_Pi_l).3  x  1}
     '''
-    J_l = []
-    for Rotm_Pi_Qi in Rotm_Pi_Qi_l:
+    r1 = -r * np.dot(np.cross(n_cp.T, y_axis.T), x_axis)
+    r3 = -r * np.dot(np.cross(n_cp.T, y_axis.T), z_axis)
+    return np.vstack([r1, 0, r3])
+
+    '''for Rotm_Pi_Qi in Rotm_Pi_Qi_l:
 
         # extracting basis vector coordinates from the rotation matrix
         x_axis = Rotm_Pi_Qi[:][0].reshape(3,1)
@@ -277,7 +285,7 @@ def compute_J_traction(r, Rotm_Pi_Qi_l, n_cp):
         r1 =  (-r*np.dot(np.cross(y_axis.T, n_cp), x_axis))[0][0]
         r3 = (-r*np.dot(np.cross(y_axis.T, n_cp), z_axis))[0][0]
         J_l.append(  np.array([r1, 0, r3]).reshape(3,1)  )
-    return np.concatenate(J_l, axis=0)
+    return np.concatenate(J_l, axis=0)'''
 
 
 def compute_J_flpLever(Rotm_Pi_Qi_l, c_fi_l, type):

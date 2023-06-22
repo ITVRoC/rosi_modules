@@ -8,6 +8,7 @@ import rospy
 import numpy as np
 
 from rosi_common.msg import Float32Array, Vector3ArrayStamped, Int8ArrayStamped
+from geometry_msgs.msg import Vector3Stamped
 
 from rosi_common.node_status_tools import nodeStatus
 from rosi_common.srv import SetNodeStatus, GetNodeStatusList
@@ -28,6 +29,7 @@ class NodeClass():
 
         self.msg_v_Pi_V = None 
         self.msg_flpTouchStatus = None
+        self.msg_n_cp = None
         
         self.x_pi = np.array([1, 0, 0])
 
@@ -44,6 +46,7 @@ class NodeClass():
         # subscriber
         sub_baseSpaceCmdVel = rospy.Subscriber('/rosi/propulsion/space/cmd_vel', Vector3ArrayStamped, self.cllbck_spaceCmdVel)
         sub_flpTouchState = rospy.Subscriber('/rosi/flippers/status/touching_ground', Int8ArrayStamped, self.cllbck_flpTouchState)
+        sub_cntctPlaneNVec = rospy.Subscriber('/rosi/model/contact_plane_normal_vec', Vector3Stamped, self.cllbck_cntctPlaneNVec)
 
         # services
         srv_setActive = rospy.Service(self.ns.getSrvPath('active', rospy), SetNodeStatus, self.srvcllbck_setActive)
@@ -69,26 +72,35 @@ class NodeClass():
             if self.ns.getNodeStatus()['active']:
                 
                 # only runs if a valid flippers touch status message has been received
-                if self.msg_v_Pi_V is not None and self.msg_flpTouchStatus is not None:
-                    pass
+                if self.msg_v_Pi_V is not None and self.msg_flpTouchStatus is not None and self.msg_n_cp is not None:
+                    
+                    # preparing the contact plane vector
+                    n_cp = np.array([self.msg_n_cp.vector.x, self.msg_n_cp.vector.y, self.msg_n_cp.vector.z]).reshape(3,1)
 
-                    for tchStatus in self.msg_flpTouchStatus:
+                    # iterates for all four locomotion mechanisms
+                    jCmdVel_l = []
+                    for tchStatus, v_Pi in zip(self.msg_flpTouchStatus, self.msg_v_Pi_V.vec ):
 
                         if tchStatus == 0: # flipper not touching the ground
-                            # updates the wheel jacobian
-                            J_w = compute_J_traction(self.wheel_radius, )
+                            # computes the wheel jacobian
+                            J_w = compute_J_traction(self.wheel_radius, n_cp)
+                        else:
+                             # computes tracks jacobian
+                            J_w = compute_J_traction(self.track_radius, n_cp)
 
-                    
-                    #cmdVelJ = [tractionJointSpeedGivenLinVel(vel,'wheel') if val==0 else tractionJointSpeedGivenLinVel(vel,'flipper') for vel,val in zip(v_x, self.msg_flpTouchStatus)]
+                        # prepares the velocity input for the traction joint
+                        v_Pi_v = np.array([v_Pi.x, v_Pi.y, v_Pi.z]).reshape(3,1)
 
-                    
-                    
+                        # computing the joint velocity
+                        jCmdVel_l.append(np.dot(np.linalg.pinv(J_w), v_Pi_v)[0][0])
+                   
+                    print(jCmdVel_l)
 
                     # publishing the message
                     m = Float32Array()
                     m.header.stamp = rospy.get_rostime()
                     m.header.frame_id = self.node_name
-                    m.data = correctTractionJointSignal(cmdVelJ)
+                    m.data = correctTractionJointSignal(jCmdVel_l)
                     self.pub_jointCmdVel.publish(m)
 
                     """
@@ -123,6 +135,10 @@ class NodeClass():
         '''Callback for the traction propellant frame corrective vector'''
         # transforming input ROS msg into a python list of lists
         self.msg_v_Pi_V = msg
+
+    def cllbck_cntctPlaneNVec(self, msg):
+        '''Callback for the contact plane n vector'''
+        self.msg_n_cp = msg
 
 
     ''' === Service Callbacks === '''
