@@ -91,7 +91,6 @@ class NodeClass():
                         #finding the gravity vector w.r.t. {R} frame
                         q_w_r = np.quaternion(self.msg_imu.orientation.w, self.msg_imu.orientation.x, self.msg_imu.orientation.y, self.msg_imu.orientation.z) # finding the {R} orientation wrt {W}                        
                         q_r_g = q_w_r.conj() * self.q_g_def * q_w_r     # gravity vector w.r.t. {R}
-                        # TODO publicar o vetor de velocidade
                         
                         # extracting flippers needed data
                         _, flp_data = jointStateData2dict(self.flpJointState)

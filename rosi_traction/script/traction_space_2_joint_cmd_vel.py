@@ -7,12 +7,14 @@ import rospy
 
 import numpy as np
 
-from rosi_common.msg import Float32Array, Vector3Array, Int8ArrayStamped
+from rosi_common.msg import Float32Array, Vector3ArrayStamped, Int8ArrayStamped
 
 from rosi_common.node_status_tools import nodeStatus
 from rosi_common.srv import SetNodeStatus, GetNodeStatusList
 
-from rosi_common.rosi_tools import tractionJointSpeedGivenLinVel, correctTractionJointSignal
+from rosi_common.rosi_tools import compute_J_traction, tractionJointSpeedGivenLinVel, correctTractionJointSignal
+
+from rosi_model.rosi_description import coefs_baseLinVel_wrt_trJointSpeed_tracks, coefs_baseLinVel_wrt_trJointSpeed_wheels, rotm_base_piFlp, tr_base_piFlp
 
 class NodeClass():
 
@@ -24,10 +26,14 @@ class NodeClass():
         # node status object
         self.ns = nodeStatus(node_name)
 
-        self.v_corrDirVec = [[0,0,0],[0,0,0],[0,0,0],[0,0,0]] # initially, there is no correction to make, until some signal is received
-        self.flpTouchStatus = None
+        self.msg_v_Pi_V = None 
+        self.msg_flpTouchStatus = None
         
         self.x_pi = np.array([1, 0, 0])
+
+        # traction systems effective radius
+        self.track_radius = coefs_baseLinVel_wrt_trJointSpeed_tracks['a']
+        self.wheel_radius = coefs_baseLinVel_wrt_trJointSpeed_wheels['a']
 
 
         ##=== ROS Interfaces
@@ -36,7 +42,7 @@ class NodeClass():
         self.pub_jointCmdVel = rospy.Publisher('/rosi/traction/joint/cmd_vel/navigation', Float32Array, queue_size=5)
 
         # subscriber
-        sub_spaceCmdVel = rospy.Subscriber('/rosi/traction/space/cmd_vel', Vector3Array, self.cllbck_spaceCmdVel)
+        sub_baseSpaceCmdVel = rospy.Subscriber('/rosi/propulsion/space/cmd_vel', Vector3ArrayStamped, self.cllbck_spaceCmdVel)
         sub_flpTouchState = rospy.Subscriber('/rosi/flippers/status/touching_ground', Int8ArrayStamped, self.cllbck_flpTouchState)
 
         # services
@@ -63,8 +69,29 @@ class NodeClass():
             if self.ns.getNodeStatus()['active']:
                 
                 # only runs if a valid flippers touch status message has been received
-                if self.flpTouchStatus is not None:
+                if self.msg_v_Pi_V is not None and self.msg_flpTouchStatus is not None:
+                    pass
 
+                    for tchStatus in self.msg_flpTouchStatus:
+
+                        if tchStatus == 0: # flipper not touching the ground
+                            # updates the wheel jacobian
+                            J_w = compute_J_traction(self.wheel_radius, )
+
+                    
+                    #cmdVelJ = [tractionJointSpeedGivenLinVel(vel,'wheel') if val==0 else tractionJointSpeedGivenLinVel(vel,'flipper') for vel,val in zip(v_x, self.msg_flpTouchStatus)]
+
+                    
+                    
+
+                    # publishing the message
+                    m = Float32Array()
+                    m.header.stamp = rospy.get_rostime()
+                    m.header.frame_id = self.node_name
+                    m.data = correctTractionJointSignal(cmdVelJ)
+                    self.pub_jointCmdVel.publish(m)
+
+                    """
                     # computing velocity vectors norm
                     vel_norm_l = [np.linalg.norm(vel) for vel in self.v_corrDirVec]
 
@@ -75,7 +102,7 @@ class NodeClass():
                     v_x = [np.linalg.norm(vel)/cost if cost != 0 else 0 for vel,cost in zip(self.v_corrDirVec, cosTheta)]
 
                     # computing appliable velocity to joints
-                    cmdVelJ = [tractionJointSpeedGivenLinVel(vel,'wheel') if val==0 else tractionJointSpeedGivenLinVel(vel,'flipper') for vel,val in zip(v_x, self.flpTouchStatus)]
+                    cmdVelJ = [tractionJointSpeedGivenLinVel(vel,'wheel') if val==0 else tractionJointSpeedGivenLinVel(vel,'flipper') for vel,val in zip(v_x, self.msg_flpTouchStatus)]
                 
                     # publishing the message
                     m = Float32Array()
@@ -84,18 +111,18 @@ class NodeClass():
                     m.data = correctTractionJointSignal(cmdVelJ)
                     self.pub_jointCmdVel.publish(m)
 
-                    #print(m)
+                    #print(m)"""
                 
                 
     def cllbck_flpTouchState(self, msg):
         '''Callback method for jointState topic'''
-        self.flpTouchStatus = list(msg.data)            
+        self.msg_flpTouchStatus = msg.data          
 
 
     def cllbck_spaceCmdVel(self, msg):
         '''Callback for the traction propellant frame corrective vector'''
         # transforming input ROS msg into a python list of lists
-        self.v_corrDirVec = [[vec.x, vec.y, vec.z] for vec in msg.vec]
+        self.msg_v_Pi_V = msg
 
 
     ''' === Service Callbacks === '''
