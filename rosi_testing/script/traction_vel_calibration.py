@@ -149,7 +149,6 @@ class NodeClass():
 
     def cllbck_basePoseGT(self, msg):
         '''Callback for the ROSI base twist'''
-        #self.baseLinVel = {'x':msg.linear.x, 'y':msg.linear.y, 'z':msg.linear.z}
         self.basePoseGT_msg = msg
 
 

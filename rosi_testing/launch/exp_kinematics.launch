@@ -1,0 +1,34 @@
+<launch>
+
+    <!-- running the rosi mind node -->
+    <node name="controller_cmd_req" pkg="rosi_common" type="controller_cmd_req.py" respawn="true" />
+
+    <!-- running the rosi_flippers flippers_safety node -->
+    <node name="flippers_safety" pkg="rosi_flippers" type="flippers_safety.py" respawn="true" />
+
+    <!-- running the rosi_flippers flippers_cmd_sum node -->
+    <node name="flippers_cmd_sum" pkg="rosi_flippers" type="flippers_cmd_sum.py" respawn="true" />
+
+    <!-- running the rosi_flippers flippers_space_2_joint_cmd_vel node -->
+    <node name="flippers_space_2_joint_cmd_vel" pkg="rosi_flippers" type="flippers_space_2_joint_cmd_vel.py" respawn="true" />
+
+    <!-- running the rosi_flippers flippers_cmd_v_z_sum node -->
+    <node name="flippers_cmd_v_z_sum" pkg="rosi_flippers" type="flippers_cmd_v_z_sum.py" respawn="true" />
+
+    <!-- running the rosi_to_flippers_cmd_vel rosi_to_flippers_cmd_vel node -->
+    <node name="rosi_to_flippers_cmd_vel" pkg="rosi_flippers" type="rosi_to_flippers_cmd_vel.py" respawn="true" />
+
+    <!-- running the rosi_to_traction_cmd_vel rosi_space_to_traction_cmd_vel node -->
+    <node name="rosi_to_traction_cmd_vel" pkg="rosi_traction" type="rosi_to_traction_cmd_vel.py" respawn="true" />
+
+    <!-- running the traction_space_2_joint_cmd_vel rosi_space_to_traction_cmd_vel node -->
+    <node name="traction_space_2_joint_cmd_vel" pkg="rosi_traction" type="traction_space_2_joint_cmd_vel.py" respawn="true" />
+
+    <!-- running the rosi_traction traction_cmd_sum node -->
+    <node name="traction_cmd_sum" pkg="rosi_traction" type="traction_cmd_sum.py" respawn="true" />
+
+    <!-- running the base_cmdVel_sum rosi_space_to_traction_cmd_vel node -->
+    <node name="base_cmd_vel_sum" pkg="rosi_base" type="base_cmd_vel_sum.py" respawn="true" />
+
+  
+</launch>
