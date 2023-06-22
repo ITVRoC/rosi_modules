@@ -23,6 +23,11 @@ class NodeClass():
         '''Class constructor'''
         self.node_name = node_name
 
+        ##=== Parameters
+
+        # dof axis of traction system
+        self.tract_dof_axis = np.array([1, 0, 0]).reshape(3,1) # we consider that traction can generate velocity only along x_axis.
+
         ##=== Useful variables
         # node status object
         self.ns = nodeStatus(node_name)
@@ -79,22 +84,41 @@ class NodeClass():
 
                     # iterates for all four locomotion mechanisms
                     jCmdVel_l = []
-                    for tchStatus, v_Pi in zip(self.msg_flpTouchStatus, self.msg_v_Pi_V.vec ):
+                    for tchStatus, v_Pi_i in zip(self.msg_flpTouchStatus, self.msg_v_Pi_V.vec ):
 
                         if tchStatus == 0: # flipper not touching the ground
                             # computes the wheel jacobian
                             J_w = compute_J_traction(self.wheel_radius, n_cp)
                         else:
-                             # computes tracks jacobian
+                            # computes tracks jacobian
                             J_w = compute_J_traction(self.track_radius, n_cp)
 
-                        # prepares the velocity input for the traction joint
-                        v_Pi_v = np.array([v_Pi.x, v_Pi.y, v_Pi.z]).reshape(3,1)
+                        # mounting the input velocity vector for {Pi}
+                        v_Pi = np.array([v_Pi_i.x, v_Pi_i.y, v_Pi_i.z]).reshape(3,1)
+                        v_Pi_norm = np.linalg.norm(v_Pi)
+
+                        if v_Pi_norm != 0: # only executes if a valid command has been received
+
+                            # angle between the dof axis and the input velocity vector
+                            cos_theta = (np.dot(self.tract_dof_axis.T, v_Pi))  / v_Pi_norm 
+
+                            # computing required velocity along x_axis to match desired v_Pi
+                            # this computation is based on the idea to compensate along x the velocity that is not performed
+                            # by the traction mechanism along y_axis (since v_Pi has components along x and y).
+                            if cos_theta != 0:
+                                v_x_Pi = v_Pi_norm / cos_theta
+                            else:
+                                v_x_Pi = 0  
+
+                            # prepares the velocity input for the traction joint
+                            #v_Pi_v = np.array([v_Pi.x, v_Pi.y, v_Pi.z]).reshape(3,1)
+                            v_Pi_v = np.array([v_x_Pi[0][0], 0, 0]).reshape(3,1)
+                        
+                        else:
+                            v_Pi_v = np.zeros(3).reshape(3,1)
 
                         # computing the joint velocity
                         jCmdVel_l.append(np.dot(np.linalg.pinv(J_w), v_Pi_v)[0][0])
-                   
-                    print(jCmdVel_l)
 
                     # publishing the message
                     m = Float32Array()

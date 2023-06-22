@@ -30,7 +30,7 @@ class NodeClass():
 
         # base velocities to apply
         self.vl = [0.0, 0.0, 0.0]
-        self.va = [0.0, 0.0, 0.5]
+        self.va = [0.0, 0.0, -0.8]
 
         # node rate sleep [Hz]
         self.p_rateSleep = 50
