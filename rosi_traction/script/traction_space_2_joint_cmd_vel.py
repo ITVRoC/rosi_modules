@@ -79,6 +79,9 @@ class NodeClass():
                 # only runs if a valid flippers touch status message has been received
                 if self.msg_v_Pi_V is not None and self.msg_flpTouchStatus is not None and self.msg_n_cp is not None:
                     
+                    #for i in range(self.msg_v_Pi_V.vec):
+                    #    self.msg_v_Pi_V.vec[i].z = 0.0
+
                     # preparing the contact plane vector
                     n_cp = np.array([self.msg_n_cp.vector.x, self.msg_n_cp.vector.y, self.msg_n_cp.vector.z]).reshape(3,1)
 
@@ -106,13 +109,13 @@ class NodeClass():
                             # this computation is based on the idea to compensate along x the velocity that is not performed
                             # by the traction mechanism along y_axis (since v_Pi has components along x and y).
                             if cos_theta != 0:
-                                v_x_Pi = v_Pi_norm / cos_theta
+                                v_x_Pi = (v_Pi_norm / cos_theta)[0][0]
                             else:
                                 v_x_Pi = 0  
 
                             # prepares the velocity input for the traction joint
                             #v_Pi_v = np.array([v_Pi.x, v_Pi.y, v_Pi.z]).reshape(3,1)
-                            v_Pi_v = np.array([v_x_Pi[0][0], 0, 0]).reshape(3,1)
+                            v_Pi_v = np.array([v_x_Pi, 0, 0]).reshape(3,1)
                         
                         else:
                             v_Pi_v = np.zeros(3).reshape(3,1)
@@ -127,28 +130,6 @@ class NodeClass():
                     m.data = correctTractionJointSignal(jCmdVel_l)
                     self.pub_jointCmdVel.publish(m)
 
-                    """
-                    # computing velocity vectors norm
-                    vel_norm_l = [np.linalg.norm(vel) for vel in self.v_corrDirVec]
-
-                    # angle cosine between v_pi and x_pi
-                    cosTheta = [np.dot(np.array(vel), self.x_pi)/ vel_norm if vel_norm != 0 else 0 for vel, vel_norm in zip(self.v_corrDirVec, vel_norm_l)]
-                    
-                    # computing needed velocity in v_x projection to attend desired v
-                    v_x = [np.linalg.norm(vel)/cost if cost != 0 else 0 for vel,cost in zip(self.v_corrDirVec, cosTheta)]
-
-                    # computing appliable velocity to joints
-                    cmdVelJ = [tractionJointSpeedGivenLinVel(vel,'wheel') if val==0 else tractionJointSpeedGivenLinVel(vel,'flipper') for vel,val in zip(v_x, self.msg_flpTouchStatus)]
-                
-                    # publishing the message
-                    m = Float32Array()
-                    m.header.stamp = rospy.get_rostime()
-                    m.header.frame_id = self.node_name
-                    m.data = correctTractionJointSignal(cmdVelJ)
-                    self.pub_jointCmdVel.publish(m)
-
-                    #print(m)"""
-                
                 
     def cllbck_flpTouchState(self, msg):
         '''Callback method for jointState topic'''
