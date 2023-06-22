@@ -3,7 +3,6 @@
 It receives linear/angular velocity commands to ROSI base frame and
 generate corrective director vectors for traction frames
 '''
-
 import rospy
 
 import numpy as np
