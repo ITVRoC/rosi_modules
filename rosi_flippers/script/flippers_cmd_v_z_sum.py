@@ -3,9 +3,11 @@
 the propulsion frame.
 '''
 import rospy
-from collections import deque
+import numpy as np
+#from collections import deque
 
-from rosi_common.msg import Float32Array
+from rosi_common.msg import Vector3ArrayStamped
+from geometry_msgs.msg import Vector3
 
 from rosi_common.node_status_tools import nodeStatus
 
@@ -35,11 +37,11 @@ class NodeClass():
 
         ##=== ROS interfaces
         # publishers
-        self.pub_cmdVel_cmdVelVzPi = rospy.Publisher('/rosi/flippers/space/cmd_v_z', Float32Array, queue_size=5)
+        self.pub_cmdVel_cmdVelVzPi = rospy.Publisher('/rosi/flippers/space/cmd_v_z', Vector3ArrayStamped, queue_size=5)
 
         # subscribers
-        sub_cmdVel_cmdVelVzPi_joy = rospy.Subscriber('/rosi/flippers/space/cmd_v_z/joy', Float32Array, self.cllbck_cmdVelVzPi_joy)
-        sub_cmdVel_cmdVelVzPi_leveler = rospy.Subscriber('/rosi/flippers/space/cmd_v_z/leveler', Float32Array, self.cllbck_cmdVelVzPi_leveler)
+        sub_cmdVel_cmdVelVzPi_joy = rospy.Subscriber('/rosi/propulsion/space/cmd_vel', Vector3ArrayStamped, self.cllbck_cmdVelVzPi_joy)
+        sub_cmdVel_cmdVelVzPi_leveler = rospy.Subscriber('/rosi/flippers/space/cmd_v_z/leveler', Vector3ArrayStamped, self.cllbck_cmdVelVzPi_leveler)
 
 
         ##=== Main method 
@@ -61,26 +63,24 @@ class NodeClass():
                 time_current = rospy.get_rostime()
                 
                 # empty command vector that will receive the sum
-                cmd_v_z_sum = 4*[0]
+                cmd_v_z_sum = 4*[np.zeros(3)]
 
                 # treats the command received by the joystick subsystem
                 if self.msg_cmdz_joy is not None:
                     if (time_current - self.msg_cmdz_joy.header.stamp) <= self.timeWindowToDiscardCmd: 
-                            cmd_v_z_sum = [x+y for x,y in zip(cmd_v_z_sum, self.msg_cmdz_joy.data)]
+                            cmd_v_z_sum = [x + np.array([v.x, v.y, v.z]) for x,v in zip(cmd_v_z_sum, self.msg_cmdz_joy.vec)]
 
                 # treats the command received by the leveler subsystem
                 if self.msg_cmdz_lev is not None:
                     if (time_current - self.msg_cmdz_lev.header.stamp) <= self.timeWindowToDiscardCmd: 
-                            cmd_v_z_sum = [x+y for x,y in zip(cmd_v_z_sum, self.msg_cmdz_lev.data)]
-
+                            cmd_v_z_sum = [x + np.array([v.x, v.y, v.z]) for x,v in zip(cmd_v_z_sum, self.msg_cmdz_lev.vec)]
 
                 # publishing message
-                m = Float32Array()
+                m = Vector3ArrayStamped()
                 m.header.stamp = time_current
                 m.header.frame_id = self.node_name
-                m.data = cmd_v_z_sum
+                m.vec = [Vector3(v[0], v[1], v[2]) for v in  cmd_v_z_sum]
                 self.pub_cmdVel_cmdVelVzPi.publish(m)
-                print(m)
 
 
     def cllbck_cmdVelVzPi_joy(self, msg): 
@@ -91,32 +91,6 @@ class NodeClass():
     def cllbck_cmdVelVzPi_leveler(self, msg): 
         """ Callback for a ROS topic"""
         self.msg_cmdz_lev = msg
-
-
-    """@staticmethod
-    def sumsToCmdIfOk(cmd_in, queue, time_current, time_window):
-        '''Pops an element from the queu and sums the command to cmd_l if it is
-        within allowed time window
-        Input:
-            - cmd_in <list>: the list with current commands. This variable may be directly modified by reference
-            - queue <collection.deque>: a queue with a buffer of received commands
-            - time_current <genpy.time>: current ros time to compare with the last received message
-            - time_window <genpy.duration>: the allowed time window
-        Output
-            - the summed command list <list>
-            
-        '''
-        # treats for the command received by the joystick branch
-        if len(queue) > 0: # treats if there is a valid value here
-            msg_curr = queue.popleft()
-            if time_current - msg_curr['stamp'] <= time_window:
-                cmd_out = [x+y for x,y in zip(cmd_in, msg_curr['data'])]
-                return cmd_out
-            else:
-                rospy.logwarn('input cmd discarded due time window is bigger than allowed.')
-                return cmd_in
-        else:
-            return cmd_in"""
 
 
 if __name__ == '__main__':
