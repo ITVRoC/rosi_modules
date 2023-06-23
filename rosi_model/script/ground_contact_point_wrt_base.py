@@ -27,6 +27,11 @@ class NodeClass():
         '''Class constructor'''
         self.node_name = node_name
 
+        ##=== Parameters
+
+        # node rate sleep
+        self.p_nodeRateSleep = 20
+
         ##=== Useful variables
 
         # node status object
@@ -55,7 +60,8 @@ class NodeClass():
 
         ##=== ROS interfaces
         # publisher
-        self.pub_cntctPnt = rospy.Publisher('/rosi/model/contact_point_wrt_base', Vector3ArrayStamped, queue_size=5)
+        self.pub_cntctPntBase = rospy.Publisher('/rosi/model/contact_point_wrt_base', Vector3ArrayStamped, queue_size=5)
+        self.pub_cntctPntPi = rospy.Publisher('/rosi/model/contact_point_wrt_pi', Vector3ArrayStamped, queue_size=5)
         self.pub_gvector = rospy.Publisher('/rosi/model/grav_vec_wrt_frame_r', Vector3Stamped, queue_size=5)
 
         # subscribers
@@ -71,12 +77,11 @@ class NodeClass():
         self.nodeMain()
 
 
-
     def nodeMain(self):
         '''Node main method'''
 
         # node rate slee;
-        node_rate_sleep = rospy.Rate(10)
+        node_rate_sleep = rospy.Rate(self.p_nodeRateSleep)
 
         # spins
         rospy.loginfo('Node in spin mode.')
@@ -100,13 +105,13 @@ class NodeClass():
                         flp_touch = self.flpTouchState.data
 
                         # numpy vector array with accumulating contact points
-                        cp_Pi_l = []
+                        dq_Pi_cp = []
 
                         # computing contact point w.r.t. frame Pi
                         for key, touch, jointPos in zip(propKeys, flp_touch, flp_pos):  # iterates for all four propellants
 
                             if touch == 0:  # when wheel is touching the ground 
-                                cp_Pi_l.append(dq_pi_wheelContact[key])
+                                dq_Pi_cp.append(dq_pi_wheelContact[key])
 
                             else: # when flipper is touching the ground
 
@@ -119,12 +124,13 @@ class NodeClass():
                                 v_pi_cp1 = dqExtractTransV3(dq_pi_cp_elbow)
 
 
-                                #-- second flipper contact point candidate: tip
+                                #-- second flipper contact point candidate
                                 # obtaining the gravitational vector expressed in {Qi}
-                                q_pi_g =  q_base_piFlp[key].conj() * q_r_g * q_base_piFlp[key]  # expressing the gravitational vector in {Pi}
+                                q_pi_g =  q_base_piFlp[key].conj() * q_r_g * q_base_piFlp[key]  # expressing the gravitational vector in {Pi} 
                                 q_pi_qi = dqExtractRotQuaternion(dq_pi_qi)      # extracting orientation quarternion of {Qi} wrt {Pi}
                                 q_qi_g = q_pi_qi.conj() * q_pi_g * q_pi_qi      # expressing gravitational vector in the {Qi} frame
-                                v_qi_g = quat2tr(q_qi_g)
+                                v_qi_g = quat2tr(q_qi_g)                # extracts the vector from the quaternion
+                                v_qi_g = v_qi_g / np.linalg.norm(v_qi_g) # normalizes the obtained vector
 
                                 # computing the gravitational vector projection in the xz plane of {Qi{}}
                                 v_qi_g_projxz = np.array([v_qi_g[0], 0, v_qi_g[2]]).reshape(3,1)  # the projection of the gravitational vector in the xz plane of {Qi}
@@ -145,29 +151,39 @@ class NodeClass():
                                 
                                 # decides which has the smaller biggest norm (farthest from Pi along g vector)
                                 if proj_c1_g > proj_c2_g:
-                                    cp_Pi_l.append(tr2dq(v_pi_cp1))
+                                    dq_Pi_cp.append(tr2dq(v_pi_cp1))
                                 else:
-                                    cp_Pi_l.append(tr2dq(v_pi_cp2))
+                                    dq_Pi_cp.append(tr2dq(v_pi_cp2))
 
 
                         # transforming contact point w.r.t. Pi  to frame R 
-                        dq_base_cp_Pi_l = [dq_base_pi * dq_pi_cp for dq_base_pi, dq_pi_cp in zip(dq_base_piFlp.values(), cp_Pi_l)]
+                        dq_R_cp_l = [dq_base_pi * dq_pi_cp for dq_base_pi, dq_pi_cp in zip(dq_base_piFlp.values(), dq_Pi_cp)]
 
-                        # converting obtained dual-quaternions to position vectors
-                        p_base_cp_Pi_l = [dq.translation().vec3() for dq in dq_base_cp_Pi_l]
+                        # converting contact point dq wrt to {Pi} to the vector format
+                        p_Pi_cp_l = [dq.translation().vec3() for dq in dq_Pi_cp]
 
+                        # converting contact point dq wrt to {Pi} to the vector format
+                        p_R_cp_l = [dq.translation().vec3() for dq in dq_R_cp_l]
+
+
+                        ##=== Publishing messages
                         # receiving ros time
                         time_current = rospy.get_rostime()
 
-                        # publishing contact points message message
+                        # publishing contact point wrt frame {Pi}
                         m = Vector3ArrayStamped()
                         m.header.stamp = time_current
                         m.header.frame_id = self.node_name
-                        for v in p_base_cp_Pi_l:
-                            m.vec.append(Vector3(x=v[0],y=v[1],z=v[2]))
-                        self.pub_cntctPnt.publish(m)
+                        m.vec = [Vector3(p[0], p[1], p[2]) for p in p_Pi_cp_l]
+                        self.pub_cntctPntPi.publish(m)
 
-                        #print(m)
+                        # publishing contact point wrt frame {B}
+                        m = Vector3ArrayStamped()
+                        m.header.stamp = time_current
+                        m.header.frame_id = self.node_name
+                        m.vec = [Vector3(p[0], p[1], p[2]) for p in p_R_cp_l]
+                        self.pub_cntctPntBase.publish(m)
+
 
                         # publishing the gravitational vector wrt {R}
                         m = Vector3Stamped()

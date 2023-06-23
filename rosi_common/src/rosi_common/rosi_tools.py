@@ -155,7 +155,11 @@ def computeKinematicMatrixA(var_lambda, wheel_radius, ycir):
 ''' ---> CONTACT POINTS <---'''
 
 def flippersContactPoint(thetaq_l, gxz):
-    ''' Computes the flipper contact point given its lever axis angle and the 
+    ''' THIS METHOD IS DEPRECATED
+    THE METHOD TO COMPUTE CONTACT POINTS IS NOT RIGHT ANYMORE HERE
+    GO TO THE NODE groud_contact_point... for the current version
+    
+    Computes the flipper contact point given its lever axis angle and the 
     unit vector of the gravity projection onto the plane formed by x_P z_P 
     Input
         - thetaq_l <list> or <number>: flipper lever joint angle in radians, which is the angle from z_P to z_Q
@@ -299,7 +303,7 @@ def compute_J_flpLever(Rotm_Pi_Qi_l, c_fi_l, type):
     J_l = []
     for Rotm_Pi_Qi, c_fi in zip([Rotm_Pi_Qi_l], [c_fi_l]):
         
-        # corrects c_fi dimension if needed
+        # corrects contact point c_fi dimension if needed
         c_fi = c_fi.reshape(3,1) if c_fi.shape != (3,1) else c_fi
 
         # extracting basis vector coordinates from the rotation matrix
@@ -316,7 +320,8 @@ def compute_J_flpLever(Rotm_Pi_Qi_l, c_fi_l, type):
         elif type=='x':
             J = np.array([r1, 0.0, 0.0])
         elif type=='z':
-            J = np.array([r1, 0.0, r3])
+            #J = np.array([r1, 0.0, r3])
+            J = np.array([0.0, 0.0, r3])
         else:
             J = None
             print('bad value received for the type of jacobian')

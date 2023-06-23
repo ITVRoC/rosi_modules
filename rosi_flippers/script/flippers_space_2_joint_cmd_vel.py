@@ -40,6 +40,7 @@ class NodeClass():
         self.flpJointState = None
         self.d_imu = None
         self.v_z_P_l = None
+        self.msg_q_Pi_cp = None
 
         # useful vectors
         self.x_pi = np.array([1, 0, 0])
@@ -67,7 +68,7 @@ class NodeClass():
         #sub_cmdVelFlpSpace = rospy.Subscriber('/rosi/flippers/space/cmd_vel', Vector3ArrayStamped, self.cllbck_cmdVelFlpSpace)
         sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
         sub_imu = rospy.Subscriber('/sensor/imu_corrected', Imu, self.cllbck_imu)
-        # sub flp touch
+        sub_contactPointPi = rospy.Subscriber('/rosi/model/contact_point_wrt_pi', Vector3ArrayStamped, self.cllbck_contactPointPi)
 
         # services
         srv_getStatus = rospy.Service(self.ns.getSrvPath('getNodeStatus', rospy), GetNodeStatusList, self.srvcllbck_getStatus)
@@ -94,26 +95,20 @@ class NodeClass():
             if self.ns.getNodeStatus()['active'] or self.ns.getNodeStatus()['telemetry']:
 
                 # only runs if valid messages have been received from topics
-                if self.flpJointState is not None and self.d_imu  is not None and self.v_z_P_l is not None:
+                if self.flpJointState is not None and self.d_imu  is not None and self.v_z_P_l is not None and self.msg_q_Pi_cp is not None:
 
-                    # obtains the gravity vector projected onto XZ
-                    gxz = gravityVecProjectedInPlaneXZ(self.d_imu)
-
-                    # obtains flippers lever joint metrics
-                    _,f_j_l = jointStateData2dict(self.flpJointState)
-
-                    # obtains flippers contact points
-                    # TODO Deve-se rotacionar primeiro o flipper pela orientacao do robo e depois pelo valor de sua junta. Isto eh importante quando o robo esta inclinado
-                    c_f_l_Pi_l = flippersContactPoint(f_j_l['pos'], gxz)
+                    # converting contact points to numpy format
+                    p_Pi_cp_l= [np.array([p.x, p.y, p.z]) for p in self.msg_q_Pi_cp.vec]
 
                     # computes the flipper lever joint Jacobian for z axis
-                    J_flpLever_z_l = [ compute_J_flpLever(rotm_qi_pi, c_f_l_Pi, 'z') for rotm_qi_pi,c_f_l_Pi in zip(self.rotm_qi_pi_l, c_f_l_Pi_l)]
+                    J_flpLever_z_l = [ compute_J_flpLever(rotm_qi_pi, p_Pi_cp, 'z') for rotm_qi_pi, p_Pi_cp in zip(self.rotm_qi_pi_l, p_Pi_cp_l)]
 
                     # mounting velocity command vector for z_P
                     v_P_z_l = [np.array([p.x, p.y, p.z]).reshape(3,1) for p in self.v_z_P_l.vec]
 
                     # flippers joint angular velocity computed using the flipper jacobian
-                    dotq_fl_l = correctFlippersJointSignal([np.dot(np.linalg.pinv(J_flpLever_z_i), v_P_z_i)[0][0] for J_flpLever_z_i, v_P_z_i in zip(J_flpLever_z_l, v_P_z_l) ] )
+                    dotq_fl_l = [np.dot(np.linalg.pinv(J_flpLever_z_i), v_P_z_i)[0][0] for J_flpLever_z_i, v_P_z_i in zip(J_flpLever_z_l, v_P_z_l) ]
+                    dotq_fl_l = [x*y for x,y in zip(dotq_fl_l, [1, -1, 1, -1])] # correct joints signal considering ROSI motors specific mounting
 
                     # mounting publishing message flipper joints cmd message
                     if self.ns.getNodeStatus()['active']: # only runs if node is active
@@ -146,6 +141,10 @@ class NodeClass():
         self.d_imu = msg
 
         #self.dq_w_R = trAndOri2dq([0,0,0], [msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z], 'trfirst')
+
+    def cllbck_contactPointPi(self, msg):
+        '''Callback for the contact point '''
+        self.msg_q_Pi_cp = msg
 
 
     ''' === Service Callbacks === '''
