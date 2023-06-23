@@ -29,8 +29,8 @@ class NodeClass():
         ##=== Parameters
 
         # base velocities to apply
-        self.vl = [0.0, 0.0, 0.05]
-        self.va = [0.0, 0.0, 0.0]
+        self.vl = [0.0, 0.0, 0.0]
+        self.va = [0.0, 0.0, -0.2]
 
         # node rate sleep [Hz]
         self.p_rateSleep = 50
@@ -102,7 +102,7 @@ class NodeClass():
                 rospy.loginfo('Applying velocity.')
                 f4_time_spent = rospy.Duration(0)
                 f4_time_ini = rospy.get_rostime()
-                while f4_time_spent < rospy.Duration(1):
+                while f4_time_spent < rospy.Duration(2):
                     m = self.createTwistMsg(self.vl, self.va)
                     self.pub_baseCmdVel.publish(m)
                     node_rate_sleep.sleep()
@@ -135,15 +135,6 @@ class NodeClass():
                     # obtains {R} pose from the vicon marker pose
                     pose_r_dq_curr = getBasePoseFromMarkerDq(pose_marker_dq)
 
-                    # computes the pose displacement from last and current observations
-                    #pose_r_delta_dq = pose_r_dq_last.conj() * pose_r_dq_curr
-                    #rpy_r_delta = np.array(dq2rpy(pose_r_delta_dq)).reshape(3,1)
-                    #tr_r_delta = dqExtractTransV3(pose_r_delta_dq)
-
-                    # computes the velocity from deltas
-                    #rpy_r_spd = rpy_r_delta / dt
-                    #tr_r_spd = tr_r_delta / dt
-
                     # test delayed time
                     test_time = time_current - time_ini
 
@@ -151,10 +142,6 @@ class NodeClass():
                     log_data.append([test_time.to_sec()] 
                                     + self.vl + self.va
                                     + pose_r_dq_curr.vec8().tolist())
-
-                    # updating last variables
-                    #pose_r_dq_last = pose_r_dq_curr
-                    #time_last = time_current
 
                     # sleeps the node
                     node_rate_sleep.sleep()
