@@ -37,8 +37,6 @@ class NodeClass():
         self.ns = nodeStatus(node_name)
 
         self.v_corrDirVec = [[0,0,0],[0,0,0],[0,0,0],[0,0,0]] # initially, there is no correction to make, until some signal is received
-        self.flpJointState = None
-        self.d_imu = None
         self.v_z_P_l = None
         self.msg_q_Pi_cp = None
 
@@ -59,15 +57,10 @@ class NodeClass():
         ##== ROS interfaces
 
         # publishers
-        #self.pub_cmdVelFlipperSpace = rospy.Publisher('/rosi/flippers/space/cmd_v_z', Float32MultiArray, queue_size=5)
         self.pub_cmdVelFlpJnt = rospy.Publisher('/rosi/flippers/joint/cmd_vel/leveler', Float32Array, queue_size=5)
 
         # subscribers
         sub_cmdVel_cmdVelVzPi = rospy.Subscriber('/rosi/flippers/space/cmd_v_z', Vector3ArrayStamped, self.cllbck_cmdVelVzPi)
-
-        #sub_cmdVelFlpSpace = rospy.Subscriber('/rosi/flippers/space/cmd_vel', Vector3ArrayStamped, self.cllbck_cmdVelFlpSpace)
-        sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
-        sub_imu = rospy.Subscriber('/sensor/imu_corrected', Imu, self.cllbck_imu)
         sub_contactPointPi = rospy.Subscriber('/rosi/model/contact_point_wrt_pi', Vector3ArrayStamped, self.cllbck_contactPointPi)
 
         # services
@@ -95,7 +88,7 @@ class NodeClass():
             if self.ns.getNodeStatus()['active'] or self.ns.getNodeStatus()['telemetry']:
 
                 # only runs if valid messages have been received from topics
-                if self.flpJointState is not None and self.d_imu  is not None and self.v_z_P_l is not None and self.msg_q_Pi_cp is not None:
+                if self.v_z_P_l is not None and self.msg_q_Pi_cp is not None:
 
                     # converting contact points to numpy format
                     p_Pi_cp_l= [np.array([p.x, p.y, p.z]) for p in self.msg_q_Pi_cp.vec]
@@ -112,7 +105,6 @@ class NodeClass():
 
                     # mounting publishing message flipper joints cmd message
                     if self.ns.getNodeStatus()['active']: # only runs if node is active
-
                         # receives rostime
                         ros_time = rospy.get_rostime()
 
@@ -128,19 +120,9 @@ class NodeClass():
 
 
     def cllbck_cmdVelVzPi(self, msg):
+        '''Callback for the velocity input for each propulsion frame'''
         self.v_z_P_l = msg
 
-
-    def cllbck_jointState(self, msg):
-        ''' Callback for flippers state'''
-        self.flpJointState = msg
-
-
-    def cllbck_imu(self, msg):
-        ''' Callback message for imu message'''
-        self.d_imu = msg
-
-        #self.dq_w_R = trAndOri2dq([0,0,0], [msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z], 'trfirst')
 
     def cllbck_contactPointPi(self, msg):
         '''Callback for the contact point '''

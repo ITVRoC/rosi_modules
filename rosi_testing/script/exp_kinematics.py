@@ -29,8 +29,8 @@ class NodeClass():
         ##=== Parameters
 
         # base velocities to apply
-        self.vl = [0.0, 0.0, 0.0]
-        self.va = [0.0, 0.0, -0.8]
+        self.vl = [0.0, 0.0, 0.05]
+        self.va = [0.0, 0.0, 0.0]
 
         # node rate sleep [Hz]
         self.p_rateSleep = 50
