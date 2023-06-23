@@ -96,18 +96,17 @@ class NodeClass():
                         _, flp_data = jointStateData2dict(self.flpJointState)
                         flp_pos = [x*y for x,y in zip(flp_data['pos'], [1, 1, -1, -1])] # correcting joints pos signal from real axis value to the modeled concept (which considers all propulsion frames alined wrt {R})
 
-
                         # flipper ground touch data
                         flp_touch = self.flpTouchState.data
 
                         # numpy vector array with accumulating contact points
-                        cp_l = []
+                        cp_Pi_l = []
 
                         # computing contact point w.r.t. frame Pi
                         for key, touch, jointPos in zip(propKeys, flp_touch, flp_pos):  # iterates for all four propellants
 
                             if touch == 0:  # when wheel is touching the ground 
-                                cp_l.append(dq_pi_wheelContact[key])
+                                cp_Pi_l.append(dq_pi_wheelContact[key])
 
                             else: # when flipper is touching the ground
 
@@ -146,16 +145,16 @@ class NodeClass():
                                 
                                 # decides which has the smaller biggest norm (farthest from Pi along g vector)
                                 if proj_c1_g > proj_c2_g:
-                                    cp_l.append(tr2dq(v_pi_cp1))
+                                    cp_Pi_l.append(tr2dq(v_pi_cp1))
                                 else:
-                                    cp_l.append(tr2dq(v_pi_cp2))
+                                    cp_Pi_l.append(tr2dq(v_pi_cp2))
 
 
                         # transforming contact point w.r.t. Pi  to frame R 
-                        dq_base_cp_l = [dq_base_pi * dq_pi_cp for dq_base_pi, dq_pi_cp in zip(dq_base_piFlp.values(), cp_l)]
+                        dq_base_cp_Pi_l = [dq_base_pi * dq_pi_cp for dq_base_pi, dq_pi_cp in zip(dq_base_piFlp.values(), cp_Pi_l)]
 
                         # converting obtained dual-quaternions to position vectors
-                        p_base_cp_l = [dq.translation().vec3() for dq in dq_base_cp_l]
+                        p_base_cp_Pi_l = [dq.translation().vec3() for dq in dq_base_cp_Pi_l]
 
                         # receiving ros time
                         time_current = rospy.get_rostime()
@@ -164,7 +163,7 @@ class NodeClass():
                         m = Vector3ArrayStamped()
                         m.header.stamp = time_current
                         m.header.frame_id = self.node_name
-                        for v in p_base_cp_l:
+                        for v in p_base_cp_Pi_l:
                             m.vec.append(Vector3(x=v[0],y=v[1],z=v[2]))
                         self.pub_cntctPnt.publish(m)
 
