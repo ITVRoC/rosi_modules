@@ -315,7 +315,6 @@ def rotateVecByQua(qr, v):
         - v <np.array>: input vector to rotate
     Output:
         - rotated vector <np.array>
-
     '''
     # creates input quaternion as a np.quaternion element, if it is not
     if isinstance(qr, list):

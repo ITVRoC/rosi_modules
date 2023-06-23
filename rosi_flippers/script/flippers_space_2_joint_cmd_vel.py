@@ -67,6 +67,7 @@ class NodeClass():
         #sub_cmdVelFlpSpace = rospy.Subscriber('/rosi/flippers/space/cmd_vel', Vector3ArrayStamped, self.cllbck_cmdVelFlpSpace)
         sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
         sub_imu = rospy.Subscriber('/sensor/imu_corrected', Imu, self.cllbck_imu)
+        # sub flp touch
 
         # services
         srv_getStatus = rospy.Service(self.ns.getSrvPath('getNodeStatus', rospy), GetNodeStatusList, self.srvcllbck_getStatus)
@@ -98,9 +99,8 @@ class NodeClass():
                     # obtains the gravity vector projected onto XZ
                     gxz = gravityVecProjectedInPlaneXZ(self.d_imu)
 
-                    # obtains flippers lever joint angular position
+                    # obtains flippers lever joint metrics
                     _,f_j_l = jointStateData2dict(self.flpJointState)
-                    # TODO Verificar se o sinal de posicao dos flippers esta OK
 
                     # obtains flippers contact points
                     # TODO Deve-se rotacionar primeiro o flipper pela orientacao do robo e depois pelo valor de sua junta. Isto eh importante quando o robo esta inclinado

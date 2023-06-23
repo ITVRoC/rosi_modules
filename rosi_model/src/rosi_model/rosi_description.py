@@ -30,7 +30,7 @@ rotm_base_piFlp = {
     'rl': dqExtractRotM(dq_base_piFlp['rl']),
     'rr': dqExtractRotM(dq_base_piFlp['rr'])
 }
-
+''
 '''Translation of propellants frame w.r.t. base frame'''
 tr_base_piFlp = {
     'fl': dqExtractTransV3(dq_base_piFlp['fl']),
@@ -116,10 +116,10 @@ dq_qi_flpContact  = {
 
 
 tr_qi_flpContactElbow = {
-    'fl': np.array([0.079, 0.119, 0]),
-    'fr': np.array([0.079, -0.119, 0]),
-    'rl': np.array([0.079, -0.119, 0]),
-    'rr': np.array([0.079, 0.119, 0])
+    'fl': np.array([0.1437, 0.0, 0.0572]),
+    'fr': np.array([0.1437, 0.0, 0.0572]),
+    'rl': np.array([-0.1437, 0.0, 0.0572]),
+    'rr': np.array([-0.1437, 0.0, 0.0572])
 }
 
 dq_qi_flpContactElbow = {
