@@ -30,7 +30,7 @@ class NodeClass():
         ##=== Useful variables
         # node status object
         self.ns = nodeStatus(node_name)
-        self.ns.resetActive() # this node is disabled by default
+        #self.ns.resetActive() # this node is disabled by default
 
         # possible frame_ids to publish into /rosi/flippers/joint/cmd_vel
         self.pubNodesId = (

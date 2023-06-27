@@ -84,9 +84,8 @@ class NodeClass():
         node_rate_sleep =  rospy.Rate(self.p_nodeSleepRate)
 
         # waits until valid messages have been received
+        rospy.loginfo('[%s] Waiting for valid messages to appear.')
         while not rospy.is_shutdown():
-
-            rospy.loginfo('[%s] Waiting for valid messages to appear.')
             if self.msg_flpJointCmdSum is not None and self.msg_flpJntState is not None:
                 break
             node_rate_sleep.sleep()

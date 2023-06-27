@@ -46,7 +46,7 @@
     <node name="flippers_cmd_sum" pkg="rosi_flippers" type="flippers_cmd_sum.py" respawn="true" />
 
     <!-- running the rosi_flippers flippers_safety node -->
-    <!-- node name="flippers_safety" pkg="rosi_flippers" type="flippers_safety.py" respawn="true" / -->
+    <node name="flippers_safety" pkg="rosi_flippers" type="flippers_safety.py" respawn="true" />
 
     <!-- running the rosi mind node -->
     <node name="controller_cmd_req" pkg="rosi_common" type="controller_cmd_req.py" respawn="true" />

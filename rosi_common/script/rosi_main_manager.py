@@ -28,8 +28,9 @@ class NodeClass():
         self.ls_nodes_managed = (  # nodes names that are managed by this manager node
                 'joy_base_cmdVel',          
                 'joy_gen3',                  
-                'joy_flippers_cmdVel',   
-                'flippers_cmd_sum',  
+                'joy_flippers_cmdVel',  
+                'flippers_safety', 
+                #'flippers_cmd_sum',  
                 'traction_cmd_sum',
                 'chassis_control' 
         )
