@@ -2,14 +2,15 @@
 ''' This is a ROSI package that converts flippers frame y velocity computed by forward
 direction kinematics to inverse traction commands in order to cancel it. 
 '''
-from platform import java_ver
+#from platform import java_ver
 import rospy
 
-from rosi_common.msg import BoolArrayStamped, Float32Array, Int8ArrayStamped
+from rosi_common.msg import BoolArrayStamped, Float32Array, Int8ArrayStamped, Vector3ArrayStamped
 from sensor_msgs.msg import JointState
+from geometry_msgs.msg import Vector3Stamped
 
-from rosi_model.rosi_description import propKeys, dq_qi_flpContact
-from rosi_common.rosi_tools import tractionJointSpeedGivenLinVel, jointStateData2dict, correctFlippersJointSignal
+from rosi_model.rosi_description import propKeys, rotm_qi_pi, coefs_baseLinVel_wrt_trJointSpeed_tracks
+from rosi_common.rosi_tools import compute_J_flpLever, compute_J_traction, jointStateData2dict
 from rosi_common.dq_tools import angleAxis2dqRot, dqExtractTransV3
 
 from rosi_common.node_status_tools import nodeStatus
@@ -39,17 +40,28 @@ class NodeClass():
         # for storing received linear velocities in y axis of {Pi}
         self.flp_frame_lin_vel_y_l = {propKeys[0]: 0.0, propKeys[1]: 0.0, propKeys[2]: 0.0, propKeys[3]: 0.0,}
 
+        self.msg_q_Pi_cp = None
+        self.msg_n_cp = None
+
         self.flag_maxPosReached = None
         self.flpJointState = None
         self.flpTouchStatus = None
+
+        ##=== One-time calculations
+
+        # tracks effective radius
+        self.track_radius = coefs_baseLinVel_wrt_trJointSpeed_tracks['a']
 
         ##=== ROS interfaces
         self.pub_CtrlInputReq = rospy.Publisher('/rosi/traction/joint/cmd_vel/compensator', Float32Array, queue_size=5)
 
         # subscribers
+        sub_contactPointPi = rospy.Subscriber('/rosi/model/contact_point_wrt_pi', Vector3ArrayStamped, self.cllbck_contactPointPi)
+        sub_cntctPlaneNVec = rospy.Subscriber('/rosi/model/contact_plane_normal_vec', Vector3Stamped, self.cllbck_cntctPlaneNVec)
         sub_safetyLock_maxPos = rospy.Subscriber('/rosi/flippers/status/safety/max_pos_lock', BoolArrayStamped, self.cllbck_safetyLock_maxPos)
         sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
         sub_flpTouchState = rospy.Subscriber('/rosi/flippers/status/touching_ground', Int8ArrayStamped, self.cllbck_flpTouchState)
+
 
         # services
         srv_setActive = rospy.Service(self.ns.getSrvPath('active', rospy), SetNodeStatus, self.srvcllbck_setActive)
@@ -68,63 +80,134 @@ class NodeClass():
         # eternal loop
         while not rospy.is_shutdown():
 
-            if self.ns.getNodeStatus()['active'] and self.flpJointState is not None and self.flpTouchStatus is not None: # only runs if node is active
+            if self.ns.getNodeStatus()['active']: # only runs if node is active
+            
+                # only execture commands if valid values have been received from ROS topics
+                #if self.msg_q_Pi_cp is not None and self.msg_n_cp  is not None and self.flpJointState is not None and self.flpTouchStatus is not None:
+                if self.msg_q_Pi_cp is not None and \
+                    self.msg_n_cp  is not None and \
+                    self.flpJointState is not None and \
+                    self.flpTouchStatus is not None and \
+                    self.flag_maxPosReached is not None:
 
-                ##=== Working with related frames
-                _,joint_state = jointStateData2dict(self.flpJointState)
-                flp_pos = correctFlippersJointSignal(joint_state['pos'])    # this time, wee need flippers joint position accordingly to real joints (i.e., no tweak for positive angles for flippers extended)
+                    # extracts ROSI joint state date
+                    _,flp_jointState = jointStateData2dict(self.flpJointState)
 
-                # dual-quaternion of frame Qi w.r.t. Pi (its a rotation around z of the flipper joint value)
-                dq_pi_qi_l = [angleAxis2dqRot(jointPos, [0,0,1]) for jointPos in flp_pos] # rotation between Pi and Qi is only about z axis
+                    # correcting the velocity signal considering ROSI construction characteristics
+                    flp_jVel_l = [x*y for x,y in zip(flp_jointState['vel'], [1,1,-1,-1])]
 
-                # retrieving flipper touch contact w.r.t. Qi frame
-                dq_qi_cp_l = [dq_qi_flpContact[key] for key in propKeys]
+                    # converts the contact plane normal vector to the numpy format
+                    n_cp = np.array([self.msg_n_cp.vector.x, self.msg_n_cp.vector.y, self.msg_n_cp.vector.z]).reshape(3,1)
 
-                # computing contact point w.r.t. {Pi} frame
-                dq_pi_cp_l = [dq_pi_qi * dq_qi_cp for dq_pi_qi, dq_qi_cp in zip(dq_pi_qi_l, dq_qi_cp_l)]
-
-                # extracting the translation vector of every contact point ci
-                tr_pi_cp_l = [dqExtractTransV3(dq.normalize()) for dq in dq_pi_cp_l]
-
-                # computing the linear velocity at the contact point
-                w_pi_l = [j_vel * np.array([0,0,1]).reshape(3,1) for j_vel in correctFlippersJointSignal(joint_state['vel'])]
-                v_cp_wrt_pi_l = [np.cross(w_pi.T, tr_pi_cp.T) for w_pi, tr_pi_cp in zip(w_pi_l, tr_pi_cp_l)]
-
-                # net velocity between flippers contact point from each robot side
-                # but it only generates velocities if flippers are touching the ground (in theory! thats why i added an angle span restriction)
-                avl = v_cp_wrt_pi_l
-                v_cp_wrt_pi_net_l = [(avl[0]-avl[2])/2 * self.flpTouchStatus[0],
-                                     (avl[1]-avl[3])/2 * self.flpTouchStatus[1],
-                                     (avl[2]-avl[0])/2 * self.flpTouchStatus[2],
-                                     (avl[3]-avl[1])/2 * self.flpTouchStatus[3]]
+                    # converting contact points to numpy format
+                    #p_Pi_cp_l= [np.array([p.x, p.y, p.z]) for p in self.msg_q_Pi_cp.vec]
 
 
-                # traction joint speed given flipper linear velocity on the floor
-                jVel_l = []
-                for v, jPos, lim_min, lim_max in zip(v_cp_wrt_pi_net_l, flp_pos, self.flpJntLim_min, self.flpJntLim_max):
-                    if lim_min <= jPos and jPos <= lim_max:
-                        jVel_l.append(tractionJointSpeedGivenLinVel(v[0][1], 'flipper'))
-                    else:
-                        jVel_l.append(0.0)
+                    # iterates over all touch status
+                    jVel_cmd = []
+                    for ts, p_Pi_cp_vec, jVel in zip(self.flpTouchStatus, self.msg_q_Pi_cp.vec, flp_jVel_l):
+
+                        if ts == 1: # meaning that this flipper is touching the ground
+
+                            ##--- Estimating the {Pi} advance given flipper lever joint velocity
+                            # converts the individual flipper contact point to the numpy array format
+                            p_Pi_cp = np.array([p_Pi_cp_vec.x, p_Pi_cp_vec.y, p_Pi_cp_vec.z]) 
+
+                            # computes the flipper lever joint Jacobian for x axis
+                            J_flpLever_x = compute_J_flpLever(rotm_qi_pi, p_Pi_cp, 'x')
+
+                            # computes the advance velocity considering the flipper lever joint velocity given by its motor controller
+                            v_Pi_x_l = np.dot(J_flpLever_x, jVel)[0][0]
+
+
+                            ##--- Computing the traction compensation
+                            # computes the traction jacobian
+                            J_traction = compute_J_traction(self.track_radius, n_cp)
+
+                            # mounts the input velocity vector
+                            v_Pi_cmd = np.array([v_Pi_x_l, 0, 0]).reshape(3,1)
+
+                            # computes the joint velocity
+                            jVel_cmd.append( -1 * np.dot(np.linalg.pinv(J_traction), v_Pi_cmd)[0][0]  ) # we multiply by -1 because this is a compensator velocity
+
+
+                        else: # when the flippers is not touching the ground
+                            jVel_cmd.append(0.0)
+
+
+                        # applying flippers safety lock due to maximum flipper joint position reached
+                        if self.flag_maxPosReached is not None:
+                            jVel_l = [0.0 if flag is True else vel for vel, flag in zip(jVel_l, self.flag_maxPosReached)]
                         
-                #jVel_l = [tractionJointSpeedGivenLinVel(v[0][1], 'flipper') for v in v_cp_wrt_pi_net_l]
 
-                # applying flippers safety lock due to maximum flipper joint position reached
-                if self.flag_maxPosReached is not None:
-                    jVel_l = [0.0 if flag is True else vel for vel, flag in zip(jVel_l, self.flag_maxPosReached)]
+                        # mounting message to publish
+                        m = Float32Array()
+                        m.header.stamp = rospy.get_rostime()
+                        m.header.frame_id = 'traction_flipper_risal_compensator'
+                        #m.data = correctTractionJointSignal(jVel_l)
+                        m.data = jVel_l
+                        self.pub_CtrlInputReq.publish(m)
 
-                # mounting message to publish
-                m = Float32Array()
-                m.header.stamp = rospy.get_rostime()
-                m.header.frame_id = 'traction_flipper_risal_compensator'
-                #m.data = correctTractionJointSignal(jVel_l)
-                m.data = jVel_l
-                self.pub_CtrlInputReq.publish(m)
 
-                #print(m)
 
-            # sleeping the node
+                    """
+                    ##=== Working with related frames
+                    #_,joint_state = jointStateData2dict(self.flpJointState)
+                    flp_pos = correctFlippersJointSignal(joint_state['pos'])    # this time, wee need flippers joint position accordingly to real joints (i.e., no tweak for positive angles for flippers extended)
+
+                    # dual-quaternion of frame Qi w.r.t. Pi (its a rotation around z of the flipper joint value)X
+                    dq_pi_qi_l = [angleAxis2dqRot(jointPos, [0,0,1]) for jointPos in flp_pos] # rotation between Pi and Qi is only about z axis
+
+                    # retrieving flipper touch contact w.r.t. Qi frame
+                    dq_qi_cp_l = [dq_qi_flpContact[key] for key in propKeys]
+
+                    # computing contact point w.r.t. {Pi} frame
+                    dq_pi_cp_l = [dq_pi_qi * dq_qi_cp for dq_pi_qi, dq_qi_cp in zip(dq_pi_qi_l, dq_qi_cp_l)]
+
+                    # extracting the translation vector of every contact point ci
+                    tr_pi_cp_l = [dqExtractTransV3(dq.normalize()) for dq in dq_pi_cp_l]
+
+                    # computing the linear velocity at the contact point
+                    w_pi_l = [j_vel * np.array([0,0,1]).reshape(3,1) for j_vel in correctFlippersJointSignal(joint_state['vel'])]
+                    v_cp_wrt_pi_l = [np.cross(w_pi.T, tr_pi_cp.T) for w_pi, tr_pi_cp in zip(w_pi_l, p_Pi_cp_l)]
+
+                    # net velocity between flippers contact point from each robot side
+                    # but it only generates velocities if flippers are touching the ground (in theory! thats why i added an angle span restriction)
+                    avl = v_cp_wrt_pi_l
+                    v_cp_wrt_pi_net_l = [(avl[0]-avl[2])/2 * self.flpTouchStatus[0],
+                                        (avl[1]-avl[3])/2 * self.flpTouchStatus[1],
+                                        (avl[2]-avl[0])/2 * self.flpTouchStatus[2],
+                                        (avl[3]-avl[1])/2 * self.flpTouchStatus[3]]
+
+
+                    # traction joint speed given flipper linear velocity on the floor
+                    jVel_l = []
+                    for v, jPos, lim_min, lim_max in zip(v_cp_wrt_pi_net_l, flp_pos, self.flpJntLim_min, self.flpJntLim_max):
+                        if lim_min <= jPos and jPos <= lim_max:
+                            jVel_l.append(tractionJointSpeedGivenLinVel(v[0][1], 'flipper'))
+                        else:
+                            jVel_l.append(0.0)
+                            
+                    #jVel_l = [tractionJointSpeedGivenLinVel(v[0][1], 'flipper') for v in v_cp_wrt_pi_net_l]
+
+                    """
+                    
+
+                    
+
+
+            # sleeps the node
             node_sleep_rate.sleep()
+
+
+    def cllbck_contactPointPi(self, msg):
+        '''Callback for the ROSI contact points '''
+        self.msg_q_Pi_cp = msg
+
+
+    def cllbck_cntctPlaneNVec(self, msg):
+        '''Callback for the contact plane n vector'''
+        self.msg_n_cp = msg
 
 
     def cllbck_safetyLock_maxPos(self, msg):

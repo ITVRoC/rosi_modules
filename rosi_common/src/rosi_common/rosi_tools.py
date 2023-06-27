@@ -320,7 +320,6 @@ def compute_J_flpLever(Rotm_Pi_Qi_l, c_fi_l, type):
         elif type=='x':
             J = np.array([r1, 0.0, 0.0])
         elif type=='z':
-            #J = np.array([r1, 0.0, r3])
             J = np.array([0.0, 0.0, r3])
         else:
             J = None

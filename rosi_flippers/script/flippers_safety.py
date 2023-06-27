@@ -25,24 +25,27 @@ class NodeClass():
         '''Class constructor'''
         self.node_name = node_name
 
-        ##==== parameters
+        ##== Parameters
          # minimum velocity command to send for flippers in deg/s (absolute value around zero)
         self.p_flpCmd_minValue = np.deg2rad(0.3)   
 
          # flippers joints max rotational velocity in deg/s
-        self.dict_flprsVelLimits = {'negative': -np.deg2rad(10), 'positive': np.deg2rad(10)}
+        self.dict_flprsVelLimits = {'negative': -np.deg2rad(15), 'positive': np.deg2rad(15)}
 
         # flippers angular position limits
         #self.dict_flprsPosLimits = {'min': np.deg2rad(20), 'max': np.deg2rad(160)} 
+
+        # note sleep rate
+        self.p_nodeSleepRate = 20 # [Hz]
 
         ##==== useful variables
         # node status object
         self.ns = nodeStatus(node_name)
 
-        self.dt = 0.0
-        self.time_last = rospy.Time()
-        self.flag_firstRun = True
-        self.d_flippers = None
+        self.msg_flpJointCmdSum = None
+
+        
+        self.msg_flpJntState = None
         self.flag_maxPosReached = None
 
         # default epos modes for publishing
@@ -71,79 +74,101 @@ class NodeClass():
         srv_setTelemetry = rospy.Service(self.ns.getSrvPath('telemetry', rospy), SetNodeStatus, self.srvcllbck_setTelemetry)
 
         # spins the node
-        rospy.spin()
+        self.nodeMain()
 
 
-    def cllbck_cmdVelFlpJointSum(self,msg):
-        ''' ROS topic callback that receives flippers commands'''
+    def nodeMain(self):
+        '''Node main method'''
 
-        if self.ns.getNodeStatus()['active'] or self.ns.getNodeStatus()['telemetry']:
+        # node rate sleep
+        node_rate_sleep =  rospy.Rate(self.p_nodeSleepRate)
 
-            # extracting flippers only commands
-            cmd_flprs = correctFlippersJointSignal(list(msg.data[4:]))
+        # waits until valid messages have been received
+        while not rospy.is_shutdown():
 
-            # treating time dt
-            time_current = rospy.get_rostime()
-            if self.flag_firstRun:
-                self.dt = 0.0
-                self.flag_firstRun = False
-            else:
-                self.dt = (time_current - self.time_last).to_sec()
-            self.time_last = time_current
-
-            # cuts the command if it is small or big enough
-            cmd_flprs =  [cmd if np.abs(cmd) >= self.p_flpCmd_minValue else 0.0 for cmd in cmd_flprs]
-
-            # cuts commands above flipper max rot speed
-            cmd_flprs = clipFlipVel(cmd_flprs, self.dict_flprsVelLimits)
-
-            # cuts commands that would lead flippers outside safe operational range for the body leveler
-            if self.d_flippers != None:
-                cmd_flprs, self.flag_maxPosReached = clipFlipPos(cmd_flprs, self.d_flippers["pos"], dict_flprsPosLimits , self.dt)
-            else:
-                cmd_flprs = [0.0]*4
-                rospy.logwarn('node stil did not receive any flippers joints telemetry. Flippers safety can not be ensured!!!')
-
-            
-            ##=== Treating node status flags
-            
-            if self.ns.getNodeStatus()['haltcmd']:  # if node is commanded to send halt commands
-                cmd_flprs = [0.0]*4
-            elif self.ns.getNodeStatus()['bypass']: # if bypass is enabled, node only forwards received msg data
-                cmd_flprs = list(msg.data[4:])
+            rospy.loginfo('[%s] Waiting for valid messages to appear.')
+            if self.msg_flpJointCmdSum is not None and self.msg_flpJntState is not None:
+                break
+            node_rate_sleep.sleep()
 
 
-            ##=== Publishing messages
-            # mounting message to publish flippers command
-            if self.ns.getNodeStatus()['active']: # only runs if node is active
+        # initializing variables
+        dt = 0.0
+        time_last = rospy.get_rostime()
+        flag_firstRun = True
+
+        while not rospy.is_shutdown():
+
+            if self.ns.getNodeStatus()['active'] or self.ns.getNodeStatus()['telemetry']: # only runs if node is active
+
+                # extracting flippers velocity command
+                flpJnt_cmdVel_l = correctFlippersJointSignal(list(self.msg_flpJointCmdSum.data[4:]))
+                
+                # treating time dt
+                time_current = rospy.get_rostime()
+                if flag_firstRun:
+                    dt = 0.0
+                    flag_firstRun = False
+                else:
+                    dt = (time_current - time_last).to_sec()
+                time_last = time_current
+
+                # cuts the command if it is too small 
+                flpJnt_cmdVel_l =  [cmd if np.abs(cmd) >= self.p_flpCmd_minValue else 0.0 for cmd in flpJnt_cmdVel_l]
+
+                # clips flippers command based on maximum rotational speed
+                flpJnt_cmdVel_l = clipFlipVel(flpJnt_cmdVel_l, self.dict_flprsVelLimits)
+
+                # cuts commands that would lead flippers outside safe operational range for the chassis kinematics
+                flpJnt_cmdVel_l, flag_maxPosReached = clipFlipPos(flpJnt_cmdVel_l, self.msg_flpJntState["pos"], dict_flprsPosLimits , dt)
+                
+                
+                ##=== Treating node status flags
+                
+                """if self.ns.getNodeStatus()['haltcmd']:  # if node is commanded to send halt commands
+                    flpJnt_cmdVel_l = [0.0]*4
+                elif self.ns.getNodeStatus()['bypass']: # if bypass is enabled, node only forwards received msg data
+                    flpJnt_cmdVel_l = list(msg.data[4:])"""
+
+
+                ##=== Publishing messages
+                # mounting message to publish flippers command
+               
                 m = Control()
                 m.header.stamp = time_current
                 m.header.frame_id = 'flippers_safety'
                 m.originId = 0
                 m.modes = self.pubModesDefault
-                m.data = [0.0]*4 + np.ndarray.tolist(correctFlippersJointSignal(cmd_flprs))
+                m.data = [0.0]*4 + np.ndarray.tolist(correctFlippersJointSignal(flpJnt_cmdVel_l))
                 self.pub_cmdVelFlpJointSafety.publish(m)
-                print(m)
+                #print(m)
 
-
-            if self.ns.getNodeStatus()['telemetry']: # only runs if node has telemetry enabled
+                
                 # mounting message to publish flippers position safety lock
                 m = BoolArrayStamped()
                 m.header.stamp = time_current
                 m.header.frame_id = 'flippers_safety'
-                if self.flag_maxPosReached is not None:
-                    m.data = [0 if a==1 else 1 for a in self.flag_maxPosReached] # inverses the mask for suggesting a boolean that is 1 when a maxPosition cutout has occurred
+                if flag_maxPosReached is not None:
+                    m.data = [0 if a==1 else 1 for a in flag_maxPosReached] # inverses the mask for suggesting a boolean that is 1 when a maxPosition cutout has occurred
                 else:
                     m.data = [0, 0, 0, 0]
                 self.pub_safetyLock_maxPos.publish(m)
-
                 #print(m)
-                #print('------')
+
+                        
+            # sleeping the node
+            node_rate_sleep.sleep()
+
+
+
+    def cllbck_cmdVelFlpJointSum(self,msg):
+        ''' ROS topic callback that receives flippers commands'''
+        self.msg_flpJointCmdSum = msg
 
         
     def cllbck_jointState(self, msg):
         '''Callback method for jointState topic'''
-        _, self.d_flippers = jointStateData2dict(msg)
+        _, self.msg_flpJntState = jointStateData2dict(msg)
 
 
     ''' === Service Callbacks === '''
