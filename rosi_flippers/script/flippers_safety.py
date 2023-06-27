@@ -41,10 +41,10 @@ class NodeClass():
         ##==== useful variables
         # node status object
         self.ns = nodeStatus(node_name)
+        self.ns.resetActive() # this node is disabled by default
 
         self.msg_flpJointCmdSum = None
 
-        
         self.msg_flpJntState = None
         self.flag_maxPosReached = None
 

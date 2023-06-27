@@ -10,7 +10,7 @@ from sensor_msgs.msg import JointState
 from geometry_msgs.msg import Vector3Stamped
 
 from rosi_model.rosi_description import propKeys, rotm_qi_pi, coefs_baseLinVel_wrt_trJointSpeed_tracks
-from rosi_common.rosi_tools import compute_J_flpLever, compute_J_traction, jointStateData2dict
+from rosi_common.rosi_tools import compute_J_flpLever, compute_J_traction, jointStateData2dict, correctTractionJointSignal
 from rosi_common.dq_tools import angleAxis2dqRot, dqExtractTransV3
 
 from rosi_common.node_status_tools import nodeStatus
@@ -29,8 +29,8 @@ class NodeClass():
         self.jVel_deadband = 0.01
 
         # flipper joint limits for enabling the compensator
-        self.flpJntLim_min = np.radians([70, -70, -70, 70])
-        self.flpJntLim_max = np.radians([180, -180, -180, 180])
+        self.flpJntLim_min = np.radians([70, 70, 70, 70])
+        self.flpJntLim_max = np.radians([170, 170, 170, 170])
 
 
         ##=== Useful variables
@@ -99,102 +99,46 @@ class NodeClass():
                     # converts the contact plane normal vector to the numpy format
                     n_cp = np.array([self.msg_n_cp.vector.x, self.msg_n_cp.vector.y, self.msg_n_cp.vector.z]).reshape(3,1)
 
-                    # converting contact points to numpy format
-                    #p_Pi_cp_l= [np.array([p.x, p.y, p.z]) for p in self.msg_q_Pi_cp.vec]
+                    # converts the individual flipper contact point to the numpy array format
+                    p_Pi_cp_l = [np.array([p.x, p.y, p.z]) for p in  self.msg_q_Pi_cp.vec]
 
+                    # computes the flipper lever joint Jacobian for x axis
+                    J_flpLever_x_l = [compute_J_flpLever(rotm_qi_pi, p_Pi_cp, 'x')  for p_Pi_cp in p_Pi_cp_l]
 
-                    # iterates over all touch status
-                    jVel_cmd = []
-                    for ts, p_Pi_cp_vec, jVel in zip(self.flpTouchStatus, self.msg_q_Pi_cp.vec, flp_jVel_l):
-
-                        if ts == 1: # meaning that this flipper is touching the ground
-
-                            ##--- Estimating the {Pi} advance given flipper lever joint velocity
-                            # converts the individual flipper contact point to the numpy array format
-                            p_Pi_cp = np.array([p_Pi_cp_vec.x, p_Pi_cp_vec.y, p_Pi_cp_vec.z]) 
-
-                            # computes the flipper lever joint Jacobian for x axis
-                            J_flpLever_x = compute_J_flpLever(rotm_qi_pi, p_Pi_cp, 'x')
-
-                            # computes the advance velocity considering the flipper lever joint velocity given by its motor controller
-                            v_Pi_x_l = np.dot(J_flpLever_x, jVel)[0][0]
-
-
-                            ##--- Computing the traction compensation
-                            # computes the traction jacobian
-                            J_traction = compute_J_traction(self.track_radius, n_cp)
-
-                            # mounts the input velocity vector
-                            v_Pi_cmd = np.array([v_Pi_x_l, 0, 0]).reshape(3,1)
-
-                            # computes the joint velocity
-                            jVel_cmd.append( -1 * np.dot(np.linalg.pinv(J_traction), v_Pi_cmd)[0][0]  ) # we multiply by -1 because this is a compensator velocity
-
-
-                        else: # when the flippers is not touching the ground
-                            jVel_cmd.append(0.0)
-
-
-                        # applying flippers safety lock due to maximum flipper joint position reached
-                        if self.flag_maxPosReached is not None:
-                            jVel_l = [0.0 if flag is True else vel for vel, flag in zip(jVel_l, self.flag_maxPosReached)]
-                        
-
-                        # mounting message to publish
-                        m = Float32Array()
-                        m.header.stamp = rospy.get_rostime()
-                        m.header.frame_id = 'traction_flipper_risal_compensator'
-                        #m.data = correctTractionJointSignal(jVel_l)
-                        m.data = jVel_l
-                        self.pub_CtrlInputReq.publish(m)
-
-
-
-                    """
-                    ##=== Working with related frames
-                    #_,joint_state = jointStateData2dict(self.flpJointState)
-                    flp_pos = correctFlippersJointSignal(joint_state['pos'])    # this time, wee need flippers joint position accordingly to real joints (i.e., no tweak for positive angles for flippers extended)
-
-                    # dual-quaternion of frame Qi w.r.t. Pi (its a rotation around z of the flipper joint value)X
-                    dq_pi_qi_l = [angleAxis2dqRot(jointPos, [0,0,1]) for jointPos in flp_pos] # rotation between Pi and Qi is only about z axis
-
-                    # retrieving flipper touch contact w.r.t. Qi frame
-                    dq_qi_cp_l = [dq_qi_flpContact[key] for key in propKeys]
-
-                    # computing contact point w.r.t. {Pi} frame
-                    dq_pi_cp_l = [dq_pi_qi * dq_qi_cp for dq_pi_qi, dq_qi_cp in zip(dq_pi_qi_l, dq_qi_cp_l)]
-
-                    # extracting the translation vector of every contact point ci
-                    tr_pi_cp_l = [dqExtractTransV3(dq.normalize()) for dq in dq_pi_cp_l]
-
-                    # computing the linear velocity at the contact point
-                    w_pi_l = [j_vel * np.array([0,0,1]).reshape(3,1) for j_vel in correctFlippersJointSignal(joint_state['vel'])]
-                    v_cp_wrt_pi_l = [np.cross(w_pi.T, tr_pi_cp.T) for w_pi, tr_pi_cp in zip(w_pi_l, p_Pi_cp_l)]
+                    # computes the advance velocity considering the flipper lever joint velocity given by its motor controller
+                    v_Pi_x_l = [np.dot(J_flpLever_x, jVel)[0][0] for J_flpLever_x, jVel in zip(J_flpLever_x_l, flp_jVel_l) ]
 
                     # net velocity between flippers contact point from each robot side
                     # but it only generates velocities if flippers are touching the ground (in theory! thats why i added an angle span restriction)
-                    avl = v_cp_wrt_pi_l
-                    v_cp_wrt_pi_net_l = [(avl[0]-avl[2])/2 * self.flpTouchStatus[0],
-                                        (avl[1]-avl[3])/2 * self.flpTouchStatus[1],
-                                        (avl[2]-avl[0])/2 * self.flpTouchStatus[2],
-                                        (avl[3]-avl[1])/2 * self.flpTouchStatus[3]]
+                    v_cp_wrt_pi_net_l = [(v_Pi_x_l[0]-v_Pi_x_l[2])/2 * self.flpTouchStatus[0],
+                                        (v_Pi_x_l[1]-v_Pi_x_l[3])/2 * self.flpTouchStatus[1],
+                                        (v_Pi_x_l[2]-v_Pi_x_l[0])/2 * self.flpTouchStatus[2],
+                                        (v_Pi_x_l[3]-v_Pi_x_l[1])/2 * self.flpTouchStatus[3]]
 
+                    # computes the traction jacobian
+                    J_traction = compute_J_traction(self.track_radius, n_cp)
 
                     # traction joint speed given flipper linear velocity on the floor
-                    jVel_l = []
-                    for v, jPos, lim_min, lim_max in zip(v_cp_wrt_pi_net_l, flp_pos, self.flpJntLim_min, self.flpJntLim_max):
+                    jVelCmd_l = []
+                    for jVel, jPos, lim_min, lim_max in zip(v_cp_wrt_pi_net_l, flp_jointState['pos'], self.flpJntLim_min, self.flpJntLim_max):
                         if lim_min <= jPos and jPos <= lim_max:
-                            jVel_l.append(tractionJointSpeedGivenLinVel(v[0][1], 'flipper'))
+
+                            # mounts the input velocity vector
+                            v_Pi_cmd = np.array([jVel, 0, 0]).reshape(3,1)
+
+                            # computes the joint velocity
+                            jVelCmd_l.append( -1 * np.dot(np.linalg.pinv(J_traction), v_Pi_cmd)[0][0]  ) # we 
+
                         else:
-                            jVel_l.append(0.0)
+                            jVelCmd_l.append(0.0)
                             
-                    #jVel_l = [tractionJointSpeedGivenLinVel(v[0][1], 'flipper') for v in v_cp_wrt_pi_net_l]
 
-                    """
-                    
-
-                    
-
+                    # mounting message to publish
+                    m = Float32Array()
+                    m.header.stamp = rospy.get_rostime()
+                    m.header.frame_id = self.node_name
+                    m.data = correctTractionJointSignal(jVelCmd_l)
+                    self.pub_CtrlInputReq.publish(m)
 
             # sleeps the node
             node_sleep_rate.sleep()
