@@ -30,13 +30,13 @@ class NodeClass():
 
         # base velocities to apply
         self.vl = [0.0, 0.0, 0.0]
-        self.va = [0.0, 0.0, -0.2]
+        self.va = [0.0, 0.0, 0.0]
 
         # node rate sleep [Hz]
         self.p_rateSleep = 50
 
         # time to apply the command to the base
-        self.p_timeToApplyTwist = rospy.Duration.from_sec(5)
+        self.p_timeToApplyTwist = rospy.Duration.from_sec(2)
 
         # folder to save results
         test_name = 'kinematics'
@@ -102,7 +102,7 @@ class NodeClass():
                 rospy.loginfo('Applying velocity.')
                 f4_time_spent = rospy.Duration(0)
                 f4_time_ini = rospy.get_rostime()
-                while f4_time_spent < rospy.Duration(2):
+                while f4_time_spent < rospy.Duration(1):
                     m = self.createTwistMsg(self.vl, self.va)
                     self.pub_baseCmdVel.publish(m)
                     node_rate_sleep.sleep()
