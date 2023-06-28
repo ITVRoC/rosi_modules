@@ -40,7 +40,7 @@
     <node name="flippers_ground_touch_state" pkg="rosi_flippers" type="flippers_ground_touch_state.py" respawn="true" />
 
     <!-- running the rosi_flippers flippers_touch_granter node -->
-    <!-- node name="flippers_touch_granter" pkg="rosi_flippers" type="flippers_touch_granter.py" respawn="true" / -->
+    <node name="flippers_touch_granter" pkg="rosi_flippers" type="flippers_touch_granter.py" respawn="true" />
 
     <!-- running the rosi_flippers flippers_cmd_sum node -->
     <node name="flippers_cmd_sum" pkg="rosi_flippers" type="flippers_cmd_sum.py" respawn="true" />

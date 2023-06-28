@@ -38,7 +38,7 @@ class NodeClass():
         self.ns = nodeStatus(node_name)
 
         self.flpJointState = None
-        self.flpTouchState = None
+        #self.flpTouchState = None
         self.msg_imu = None
 
         ##=== Retrieving ROS parameters
@@ -65,7 +65,7 @@ class NodeClass():
         self.pub_gvector = rospy.Publisher('/rosi/model/grav_vec_wrt_frame_r', Vector3Stamped, queue_size=5)
 
         # subscribers
-        sub_flpTouchState = rospy.Subscriber('/rosi/flippers/status/touching_ground', Int8ArrayStamped, self.cllbck_flpTouchState)
+        #sub_flpTouchState = rospy.Subscriber('/rosi/flippers/status/touching_ground', Int8ArrayStamped, self.cllbck_flpTouchState)
         sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
         sub_imu = rospy.Subscriber('/sensor/imu_corrected', Imu, self.cllbck_imu)
 
@@ -90,7 +90,7 @@ class NodeClass():
             if self.ns.getNodeStatus()['active']: # only runs if node is active
 
                  # only runs if messages have been received
-                if self.flpJointState is not None and self.flpTouchState is not None and self.msg_imu  is not None: 
+                if self.flpJointState is not None and self.msg_imu  is not None: 
                     if self.flpTouchState.data[0] != -1: # only runs if the touch state node is sending valid values
 
                         #finding the gravity vector w.r.t. {R} frame
@@ -102,58 +102,63 @@ class NodeClass():
                         flp_pos = [x*y for x,y in zip(flp_data['pos'], [1, 1, -1, -1])] # correcting joints pos signal from real axis value to the modeled concept (which considers all propulsion frames alined wrt {R})
 
                         # flipper ground touch data
-                        flp_touch = self.flpTouchState.data
+                        #flp_touch = self.flpTouchState.data
 
                         # numpy vector array with accumulating contact points
                         dq_Pi_cp = []
 
                         # computing contact point w.r.t. frame Pi
-                        for key, touch, jointPos in zip(propKeys, flp_touch, flp_pos):  # iterates for all four propellants
+                        v_pi_cp_candidate_l = []
+                        for key, jointPos in zip(propKeys, flp_pos):  # iterates for all four propellants
 
-                            if touch == 0:  # when wheel is touching the ground 
-                                dq_Pi_cp.append(dq_pi_wheelContact[key])
-
-                            else: # when flipper is touching the ground
-
-                                # dual-quaternion of frame Qi w.r.t. Pi (its a rotation around z of the flipper joint value)
-                                dq_pi_qi = angleAxis2dqRot(jointPos, [0,1,0]) # rotation between Pi and Qi is always about y axis
-
-                                #-- first flipper contact point candidate: elbow
-                                # changing representation of elbow contact point from Qi to Pi
-                                dq_pi_cp_elbow = dq_pi_qi * dq_qi_flpContactElbow[key]
-                                v_pi_cp1 = dqExtractTransV3(dq_pi_cp_elbow)
+                            ##-- Touch point candidate #1: The wheel
+                            dq_Pi_cp_wheel = dq_pi_wheelContact[key]
+                            v_pi_cp_candidate_l.append(dqExtractTransV3(dq_Pi_cp_wheel))
 
 
-                                #-- second flipper contact point candidate
-                                # obtaining the gravitational vector expressed in {Qi}
-                                q_pi_g =  q_base_piFlp[key].conj() * q_r_g * q_base_piFlp[key]  # expressing the gravitational vector in {Pi} 
-                                q_pi_qi = dqExtractRotQuaternion(dq_pi_qi)      # extracting orientation quarternion of {Qi} wrt {Pi}
-                                q_qi_g = q_pi_qi.conj() * q_pi_g * q_pi_qi      # expressing gravitational vector in the {Qi} frame
-                                v_qi_g = quat2tr(q_qi_g)                # extracts the vector from the quaternion
-                                v_qi_g = v_qi_g / np.linalg.norm(v_qi_g) # normalizes the obtained vector
 
-                                # computing the gravitational vector projection in the xz plane of {Qi{}}
-                                v_qi_g_projxz = np.array([v_qi_g[0], 0, v_qi_g[2]]).reshape(3,1)  # the projection of the gravitational vector in the xz plane of {Qi}
-                                v_qi_g_projxz = (v_qi_g_projxz / np.linalg.norm(v_qi_g_projxz))  # normalizing the projected vector
+                            ##-- Touch point candidate #2: The flipper elbow
+                            # dual-quaternion of frame Qi w.r.t. Pi (its a rotation around z of the flipper joint value)
+                            dq_pi_qi = angleAxis2dqRot(jointPos, [0,1,0]) # rotation between Pi and Qi is always about y axis
 
-                                # computing the secondary contact candidate point wrt {Qi}
-                                v_qi_cp2 = self.dim_v_q_distSprockets + v_qi_g_projxz*self.p_secondarySprocket_radius # summing the vectors from {Qi} to the contact point considering the gravitational vector on the second sprocket
+                            #-- first flipper contact point candidate: elbow
+                            # changing representation of elbow contact point from Qi to Pi
+                            dq_pi_cp_elbow = dq_pi_qi * dq_qi_flpContactElbow[key]
+                            v_pi_cp_candidate_l.append(dqExtractTransV3(dq_pi_cp_elbow))
 
-                                # expressing the second candidate in pi frame
-                                dq_pi_cp2 = dq_pi_qi * tr2dq(v_qi_cp2)
-                                v_pi_cp2 = dqExtractTransV3(dq_pi_cp2)
-                           
-                                #-- deciding which candidate is the farthest from Pi along g vector
-                                # projects both candidates onto g vector
-                                v_pi_g = quat2tr(q_pi_g).reshape(3,1)
-                                proj_c1_g = projectionV1toV2_norm(v_pi_cp1.T, v_pi_g)
-                                proj_c2_g = projectionV1toV2_norm(v_pi_cp2.T, v_pi_g)
-                                
-                                # decides which has the smaller biggest norm (farthest from Pi along g vector)
-                                if proj_c1_g > proj_c2_g:
-                                    dq_Pi_cp.append(tr2dq(v_pi_cp1))
-                                else:
-                                    dq_Pi_cp.append(tr2dq(v_pi_cp2))
+
+
+                            ##-- Touch point candidadte #3: The flipper tip
+                            #-- second flipper contact point candidate
+                            # obtaining the gravitational vector expressed in {Qi}
+                            q_pi_g =  q_base_piFlp[key].conj() * q_r_g * q_base_piFlp[key]  # expressing the gravitational vector in {Pi} 
+                            q_pi_qi = dqExtractRotQuaternion(dq_pi_qi)      # extracting orientation quarternion of {Qi} wrt {Pi}
+                            q_qi_g = q_pi_qi.conj() * q_pi_g * q_pi_qi      # expressing gravitational vector in the {Qi} frame
+                            v_qi_g = quat2tr(q_qi_g)                # extracts the vector from the quaternion
+                            v_qi_g = v_qi_g / np.linalg.norm(v_qi_g) # normalizes the obtained vector
+
+                            # computing the gravitational vector projection in the xz plane of {Qi{}}
+                            v_qi_g_projxz = np.array([v_qi_g[0], 0, v_qi_g[2]]).reshape(3,1)  # the projection of the gravitational vector in the xz plane of {Qi}
+                            v_qi_g_projxz = (v_qi_g_projxz / np.linalg.norm(v_qi_g_projxz))  # normalizing the projected vector
+
+                            # computing the secondary contact candidate point wrt {Qi}
+                            v_qi_cp2 = self.dim_v_q_distSprockets + v_qi_g_projxz*self.p_secondarySprocket_radius # summing the vectors from {Qi} to the contact point considering the gravitational vector on the second sprocket
+
+                            # expressing the second candidate in pi frame
+                            dq_pi_cp2 = dq_pi_qi * tr2dq(v_qi_cp2)
+                            v_pi_cp_candidate_l.append(dqExtractTransV3(dq_pi_cp2))
+
+
+                            ##-- Deciding which is the farthest from rosi base
+                            # projects candidates to g vector
+                            v_pi_g = quat2tr(q_pi_g).reshape(3,1)
+                            v_pi_cp_candidate_projG_l = [projectionV1toV2_norm(v_pi_cp.T, v_pi_g) for v_pi_cp in v_pi_cp_candidate_l]
+
+                            # discovers the index of the which is the greatest projection distance
+                            proj_max_index = v_pi_cp_candidate_projG_l.index(  max(v_pi_cp_candidate_projG_l)  )
+
+                            # append the elected contact point candidate to the final list
+                            dq_Pi_cp.append(tr2dq(v_pi_cp_candidate_l[proj_max_index]))
 
 
                         # transforming contact point w.r.t. Pi  to frame R 
@@ -198,9 +203,9 @@ class NodeClass():
             node_rate_sleep.sleep()
 
 
-    def cllbck_flpTouchState(self, msg):
+    """def cllbck_flpTouchState(self, msg):
         '''Callback for the flippers touching ground information'''
-        self.flpTouchState = msg
+        self.flpTouchState = msg"""
 
 
     def cllbck_jointState(self, msg):

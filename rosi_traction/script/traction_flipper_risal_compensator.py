@@ -108,12 +108,20 @@ class NodeClass():
                     # computes the advance velocity considering the flipper lever joint velocity given by its motor controller
                     v_Pi_x_l = [np.dot(J_flpLever_x, jVel)[0][0] for J_flpLever_x, jVel in zip(J_flpLever_x_l, flp_jVel_l) ]
 
+
+                    # TODO DEEEEUSSSS
+                    # PAREI VERIFICANDO ESTA VARIAVEL ABAIXO
+                    print(v_Pi_x_l)
+
                     # net velocity between flippers contact point from each robot side
                     # but it only generates velocities if flippers are touching the ground (in theory! thats why i added an angle span restriction)
                     v_cp_wrt_pi_net_l = [(v_Pi_x_l[0]-v_Pi_x_l[2])/2 * self.flpTouchStatus[0],
                                         (v_Pi_x_l[1]-v_Pi_x_l[3])/2 * self.flpTouchStatus[1],
                                         (v_Pi_x_l[2]-v_Pi_x_l[0])/2 * self.flpTouchStatus[2],
                                         (v_Pi_x_l[3]-v_Pi_x_l[1])/2 * self.flpTouchStatus[3]]
+
+
+                    #print(v_cp_wrt_pi_net_l)
 
                     # computes the traction jacobian
                     J_traction = compute_J_traction(self.track_radius, n_cp)
@@ -131,6 +139,8 @@ class NodeClass():
 
                         else:
                             jVelCmd_l.append(0.0)
+
+                    
                             
 
                     # mounting message to publish
@@ -139,6 +149,11 @@ class NodeClass():
                     m.header.frame_id = self.node_name
                     m.data = correctTractionJointSignal(jVelCmd_l)
                     self.pub_CtrlInputReq.publish(m)
+                    #print(m)
+
+                    print(jVelCmd_l)
+                    print('----')
+                    print('')
 
             # sleeps the node
             node_sleep_rate.sleep()
