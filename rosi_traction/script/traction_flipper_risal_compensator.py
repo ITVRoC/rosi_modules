@@ -8,6 +8,7 @@ import rospy
 from rosi_common.msg import BoolArrayStamped, Float32Array, Int8ArrayStamped, Vector3ArrayStamped
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import Vector3Stamped
+from controller.msg import Control
 
 from rosi_model.rosi_description import propKeys, rotm_qi_pi, coefs_baseLinVel_wrt_trJointSpeed_tracks
 from rosi_common.rosi_tools import compute_J_flpLever, compute_J_traction, jointStateData2dict, correctTractionJointSignal
@@ -44,8 +45,8 @@ class NodeClass():
         self.msg_n_cp = None
 
         self.flag_maxPosReached = None
+        self.msg_controllerReqCmd= None
         self.flpJointState = None
-        self.flpTouchStatus = None
 
         ##=== One-time calculations
 
@@ -59,8 +60,8 @@ class NodeClass():
         sub_contactPointPi = rospy.Subscriber('/rosi/model/contact_point_wrt_pi', Vector3ArrayStamped, self.cllbck_contactPointPi)
         sub_cntctPlaneNVec = rospy.Subscriber('/rosi/model/contact_plane_normal_vec', Vector3Stamped, self.cllbck_cntctPlaneNVec)
         sub_safetyLock_maxPos = rospy.Subscriber('/rosi/flippers/status/safety/max_pos_lock', BoolArrayStamped, self.cllbck_safetyLock_maxPos)
+        sub_controllerReqCmd = rospy.Subscriber('/rosi/controller/req_cmd', Control, self.cllbck_controllerReqCmd)
         sub_jointState = rospy.Subscriber('/rosi/rosi_controller/joint_state', JointState, self.cllbck_jointState)
-        sub_flpTouchState = rospy.Subscriber('/rosi/flippers/status/touching_ground', Int8ArrayStamped, self.cllbck_flpTouchState)
 
 
         # services
@@ -86,15 +87,18 @@ class NodeClass():
                 #if self.msg_q_Pi_cp is not None and self.msg_n_cp  is not None and self.flpJointState is not None and self.flpTouchStatus is not None:
                 if self.msg_q_Pi_cp is not None and \
                     self.msg_n_cp  is not None and \
+                    self.msg_controllerReqCmd is not None and \
                     self.flpJointState is not None and \
-                    self.flpTouchStatus is not None and \
                     self.flag_maxPosReached is not None:
 
                     # extracts ROSI joint state date
-                    _,flp_jointState = jointStateData2dict(self.flpJointState)
+                    _, flp_jointState = jointStateData2dict(self.flpJointState)
+
+                    # extracting the velocity command to flipper joints
+                    flp_jVel_l = self.msg_controllerReqCmd.data[4:]
 
                     # correcting the velocity signal considering ROSI construction characteristics
-                    flp_jVel_l = [x*y for x,y in zip(flp_jointState['vel'], [1,1,-1,-1])]
+                    flp_jVel_l = [x*y for x,y in zip(flp_jVel_l, [1,-1, 1, -1])]
 
                     # converts the contact plane normal vector to the numpy format
                     n_cp = np.array([self.msg_n_cp.vector.x, self.msg_n_cp.vector.y, self.msg_n_cp.vector.z]).reshape(3,1)
@@ -108,20 +112,12 @@ class NodeClass():
                     # computes the advance velocity considering the flipper lever joint velocity given by its motor controller
                     v_Pi_x_l = [np.dot(J_flpLever_x, jVel)[0][0] for J_flpLever_x, jVel in zip(J_flpLever_x_l, flp_jVel_l) ]
 
-
-                    # TODO DEEEEUSSSS
-                    # PAREI VERIFICANDO ESTA VARIAVEL ABAIXO
-                    print(v_Pi_x_l)
-
-                    # net velocity between flippers contact point from each robot side
-                    # but it only generates velocities if flippers are touching the ground (in theory! thats why i added an angle span restriction)
-                    v_cp_wrt_pi_net_l = [(v_Pi_x_l[0]-v_Pi_x_l[2])/2 * self.flpTouchStatus[0],
-                                        (v_Pi_x_l[1]-v_Pi_x_l[3])/2 * self.flpTouchStatus[1],
-                                        (v_Pi_x_l[2]-v_Pi_x_l[0])/2 * self.flpTouchStatus[2],
-                                        (v_Pi_x_l[3]-v_Pi_x_l[1])/2 * self.flpTouchStatus[3]]
-
-
-                    #print(v_cp_wrt_pi_net_l)
+                    
+                    v_cp_wrt_pi_net_l = [ v_Pi_x_l[0] if np.sign(v_Pi_x_l[0]) *  np.sign(v_Pi_x_l[2]) < 0 else 0.0, 
+                                          v_Pi_x_l[1] if np.sign(v_Pi_x_l[1]) *  np.sign(v_Pi_x_l[3]) < 0 else 0.0, 
+                                          v_Pi_x_l[2] if np.sign(v_Pi_x_l[2]) *  np.sign(v_Pi_x_l[0]) < 0 else 0.0, 
+                                          v_Pi_x_l[3] if np.sign(v_Pi_x_l[3]) *  np.sign(v_Pi_x_l[1]) < 0 else 0.0 
+                                        ]
 
                     # computes the traction jacobian
                     J_traction = compute_J_traction(self.track_radius, n_cp)
@@ -139,8 +135,6 @@ class NodeClass():
 
                         else:
                             jVelCmd_l.append(0.0)
-
-                    
                             
 
                     # mounting message to publish
@@ -150,10 +144,7 @@ class NodeClass():
                     m.data = correctTractionJointSignal(jVelCmd_l)
                     self.pub_CtrlInputReq.publish(m)
                     #print(m)
-
-                    print(jVelCmd_l)
-                    print('----')
-                    print('')
+                    
 
             # sleeps the node
             node_sleep_rate.sleep()
@@ -174,14 +165,14 @@ class NodeClass():
         self.flag_maxPosReached = msg.data
 
     
+    def cllbck_controllerReqCmd(self,msg):
+        ''' ROS topic callback that receives flippers commands'''
+        self.msg_controllerReqCmd= msg
+
+
     def cllbck_jointState(self, msg):
         '''Callback for the joints state  signal'''
         self.flpJointState = msg
-
-
-    def cllbck_flpTouchState(self, msg):
-        '''Callback method for jointState topic'''
-        self.flpTouchStatus = list(msg.data) 
 
 
     ''' === Service Callbacks === '''

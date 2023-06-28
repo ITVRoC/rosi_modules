@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   rosi_base
+  controller
 )
 
 ## System dependencies are found with CMake's conventions
