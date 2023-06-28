@@ -5,6 +5,8 @@ It considers that flippers are in the extended semi-circle (pointing outwards co
 '''
 import rospy
 
+from collections import deque
+
 from rosi_common.msg import Int8ArrayStamped
 from sensor_msgs.msg import JointState
 
@@ -28,6 +30,9 @@ class NodeClass():
         # time window to state that no further message has been received
         self.timeWindowToDiscard = rospy.Duration.from_sec(0.3)
 
+        # number of last torque readings to perform the avg value of last received torque data
+        self.torqueAvgQtd = 10
+
         ##=== Useful variables
         # node status object
         self.ns = nodeStatus(node_name)
@@ -47,6 +52,12 @@ class NodeClass():
         # last received message time sequence
         self.lastMsgSeq = None
         self.lastMsgTime = None
+
+        # torque log variable
+        self.torque_log_l = [deque(maxlen=self.torqueAvgQtd),
+                             deque(maxlen=self.torqueAvgQtd),
+                             deque(maxlen=self.torqueAvgQtd),
+                             deque(maxlen=self.torqueAvgQtd)]
 
         ##=== ROS interfaces
         self.pub_touchStatus = rospy.Publisher('/rosi/flippers/status/touching_ground', Int8ArrayStamped, queue_size=5)
@@ -85,8 +96,6 @@ class NodeClass():
                     self.dt = time_current - self.time_last
                 self.time_last = time_current
 
-                print(self.flpMsg)
-
                 # using received message to compute flippers state
                 if self.flpMsg == None: # it means no message has been received
                     ret = [-1]*4
@@ -109,9 +118,27 @@ class NodeClass():
                     if self.dt_MsgAccum > self.timeWindowToDiscard:
                         ret = [-1]*4
                     else:   # condition when there is a received valid value within time window
-                        # computes the values to return 
+
+                        # current torque reading
                         torque_sigFixed = correctFlippersJointSignal(list(self.flpMsg.effort[4:])) # only last 4 torque values are flipper ones
-                        ret = [0 if torque < self.torqueThreshold else 1 for torque in torque_sigFixed]
+
+                        # adding torque values to the log
+                        for torque_val, torque_log in zip(torque_sigFixed, self.torque_log_l):
+                            torque_log.append(torque_val)
+
+
+                        # only executes when the proper number of torque values have been received
+                        if len(self.torque_log_l[0]) >= self.torqueAvgQtd:
+
+                            # computes the average of n last torque values
+                            torque_avg = [sum(list(torque_log_i))/self.torqueAvgQtd for torque_log_i in self.torque_log_l]
+
+                            # estimates the contact based on the torque average sign
+                            ret = [0 if torque_avg_i < self.torqueThreshold else 1 for torque_avg_i in torque_avg]
+
+                        else: # in case of not enough values have been received
+                            ret = 4*[-1] # sends a invalid value
+
 
                 # publishing the message
                 m = Int8ArrayStamped()
@@ -120,7 +147,7 @@ class NodeClass():
                 m.data = ret
                 self.pub_touchStatus.publish(m)
 
-                #print(m)
+                print(m)
 
             # sleeps the node
             node_rate_sleep.sleep()

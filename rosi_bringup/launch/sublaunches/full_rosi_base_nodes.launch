@@ -25,7 +25,7 @@
     <node name="traction_space_2_joint_cmd_vel" pkg="rosi_traction" type="traction_space_2_joint_cmd_vel.py" respawn="true" />
 
     <!-- running the rosi_traction traction_flipper_risal_compensator node -->
-    <!-- node name="traction_flipper_risal_compensator" pkg="rosi_traction" type="traction_flipper_risal_compensator.py" respawn="true" / -->
+    <node name="traction_flipper_risal_compensator" pkg="rosi_traction" type="traction_flipper_risal_compensator.py" respawn="true" />
 
     <!-- running the rosi_traction traction_cmd_sum node -->
     <node name="traction_cmd_sum" pkg="rosi_traction" type="traction_cmd_sum.py" respawn="true" />
@@ -37,7 +37,7 @@
     <node name="flippers_space_2_joint_cmd_vel" pkg="rosi_flippers" type="flippers_space_2_joint_cmd_vel.py" respawn="true" />
 
     <!-- running the flippers_ground_touch_state rosi_space_to_traction_cmd_vel node -->
-    <node name="flippers_ground_touch_state" pkg="rosi_flippers" type="flippers_ground_touch_state.py" respawn="true" />
+    <!-- node name="flippers_ground_touch_state" pkg="rosi_flippers" type="flippers_ground_touch_state.py" respawn="true" / -->
 
     <!-- running the rosi_flippers flippers_touch_granter node -->
     <node name="flippers_touch_granter" pkg="rosi_flippers" type="flippers_touch_granter.py" respawn="true" />
