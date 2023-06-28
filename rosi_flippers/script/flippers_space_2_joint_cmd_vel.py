@@ -91,7 +91,7 @@ class NodeClass():
                 if self.v_z_P_l is not None and self.msg_q_Pi_cp is not None:
 
                     # converting contact points to numpy format
-                    p_Pi_cp_l= [np.array([p.x, p.y, p.z]) for p in self.msg_q_Pi_cp.vec]
+                    p_Pi_cp_l = [np.array([p.x, p.y, p.z]) for p in self.msg_q_Pi_cp.vec]
 
                     # computes the flipper lever joint Jacobian for z axis
                     J_flpLever_z_l = [ compute_J_flpLever(rotm_qi_pi, p_Pi_cp, 'z') for rotm_qi_pi, p_Pi_cp in zip(self.rotm_qi_pi_l, p_Pi_cp_l)]
@@ -114,6 +114,7 @@ class NodeClass():
                         mp.header.frame_id = 'flippers_space_2_joint_cmd_vel'
                         mp.data = dotq_fl_l
                         self.pub_cmdVelFlpJnt.publish(mp)
+                        #print(mp)
 
             # sleeps the node
             node_rate_sleep.sleep()
