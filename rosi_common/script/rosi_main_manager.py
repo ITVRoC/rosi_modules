@@ -200,6 +200,7 @@ class NodeClass():
         rospy.loginfo("[manager] Waiting for service: %s", service_path)
         rospy.wait_for_service(service_path)
         rospy.loginfo("[manager] Service %s found!", service_path)
+        rospy.loginfo("")
         return rospy.ServiceProxy(service_path, service_type)
 
 
