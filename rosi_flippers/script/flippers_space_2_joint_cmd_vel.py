@@ -95,9 +95,25 @@ class NodeClass():
                     v_P_z_l = [np.array([p.x, p.y, p.z]).reshape(3,1) for p in self.v_z_P_l.vec]
 
                     # flippers joint angular velocity computed using the flipper jacobian
-                    dotq_fl_l = [np.dot(np.linalg.pinv(J_flpLever_z_i), v_P_z_i)[0][0] for J_flpLever_z_i, v_P_z_i in zip(J_flpLever_z_l, v_P_z_l) ]
-                    dotq_fl_l = [x*y for x,y in zip(dotq_fl_l, [1, -1, 1, -1])] # correct joints signal considering ROSI motors specific mounting
+                    dotq_flp_l = [np.dot(np.linalg.pinv(J_flpLever_z_i), v_P_z_i)[0][0] for J_flpLever_z_i, v_P_z_i in zip(J_flpLever_z_l, v_P_z_l) ]
 
+
+                    # computing the sign joints commands
+                    dotq_flp_sign_l = np.sign(dotq_flp_l)
+
+                    # doubles the command velocity if flippers rotate in the same direction
+                    # this is due ROSI flippers specific characteristics when reorienting the flipper couple of each side
+                    if dotq_flp_sign_l[0] * dotq_flp_sign_l[2] > 0:
+                        dotq_flp_l[0] = dotq_flp_l[0] * 2
+                        dotq_flp_l[2] = dotq_flp_l[2] * 2
+
+                    if dotq_flp_sign_l[1] * dotq_flp_sign_l[3] > 0:
+                        dotq_flp_l[1] = dotq_flp_l[1] * 2
+                        dotq_flp_l[3] = dotq_flp_l[3] * 2
+
+                    # correct joints signal considering ROSI motors specific mounting
+                    dotq_flp_l = [x*y for x,y in zip(dotq_flp_l, [1, -1, 1, -1])] 
+                   
                     # mounting publishing message flipper joints cmd message
                     if self.ns.getNodeStatus()['active']: # only runs if node is active
                         # receives rostime
@@ -107,7 +123,7 @@ class NodeClass():
                         mp = Float32Array()
                         mp.header.stamp = ros_time
                         mp.header.frame_id = 'flippers_space_2_joint_cmd_vel'
-                        mp.data = dotq_fl_l
+                        mp.data = dotq_flp_l
                         self.pub_cmdVelFlpJnt.publish(mp)
                         #print(mp)
 

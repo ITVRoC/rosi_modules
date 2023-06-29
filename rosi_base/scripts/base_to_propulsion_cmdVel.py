@@ -52,7 +52,7 @@ class NodeClass():
                                       self.msg_baseCmdVel.twist.linear.y,
                                       self.msg_baseCmdVel.twist.linear.z,
                                       self.msg_baseCmdVel.twist.angular.x,
-                                      self.msg_baseCmdVel.twist.angular.y,
+                                      self.msg_baseCmdVel.twist.angular.y, 
                                       self.msg_baseCmdVel.twist.angular.z,]).reshape(6,1)
 
                 # computes the velocity command for each propulsion frame
