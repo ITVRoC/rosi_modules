@@ -98,19 +98,19 @@ class NodeClass():
                     dotq_flp_l = [np.dot(np.linalg.pinv(J_flpLever_z_i), v_P_z_i)[0][0] for J_flpLever_z_i, v_P_z_i in zip(J_flpLever_z_l, v_P_z_l) ]
 
 
-                    # computes the command correction and sums to computed joint velocity
-                    # this is due ROSI flippers specific characteristics when reorienting the flipper couple of each side
-                    corr_factor = { 
-                        'side_a' : (dotq_flp_l[0] + dotq_flp_l[2]) / 2,
-                        'side_b' : (dotq_flp_l[1] + dotq_flp_l[3]) / 2
-                    }
+                    # computing the sign joints commands
+                    dotq_flp_sign_l = np.sign(dotq_flp_l)
 
-                    dotq_flp_l = [
-                        dotq_flp_l[0] + corr_factor['side_a'],
-                        dotq_flp_l[1] + corr_factor['side_b'],
-                        dotq_flp_l[2] + corr_factor['side_a'],
-                        dotq_flp_l[3] + corr_factor['side_b']
-                    ]
+                    # doubles the command velocity if flippers rotate in the same direction
+                    # this is due ROSI flippers specific characteristics when reorienting the flipper couple of each side
+                    if dotq_flp_sign_l[0] * dotq_flp_sign_l[2] > 0:
+                        dotq_flp_l[0] = dotq_flp_l[0] * 2
+                        dotq_flp_l[2] = dotq_flp_l[2] * 2
+
+                    if dotq_flp_sign_l[1] * dotq_flp_sign_l[3] > 0:
+                        dotq_flp_l[1] = dotq_flp_l[1] * 2
+                        dotq_flp_l[3] = dotq_flp_l[3] * 2
+
 
                     # correct joints signal considering ROSI motors specific mounting
                     dotq_flp_l = [x*y for x,y in zip(dotq_flp_l, [1, -1, 1, -1])] 
