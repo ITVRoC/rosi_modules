@@ -20,7 +20,7 @@ class NodeClass():
 
         ##=== PARAMETERS
         # flippers rotational velocity while searching for the floor
-        self.searchFlpVel = 0.1
+        self.searchFlpVel = 0.05
 
         ##===seful variables
         # node status object

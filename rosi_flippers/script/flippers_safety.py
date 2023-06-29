@@ -30,7 +30,7 @@ class NodeClass():
         self.p_flpCmd_minValue = np.deg2rad(0.3)   
 
          # flippers joints max rotational velocity in deg/s
-        self.dict_flprsVelLimits = {'negative': -np.deg2rad(15), 'positive': np.deg2rad(15)}
+        self.dict_flprsVelLimits = {'negative': -np.deg2rad(30), 'positive': np.deg2rad(30)}
 
         # flippers angular position limits
         #self.dict_flprsPosLimits = {'min': np.deg2rad(20), 'max': np.deg2rad(160)} 

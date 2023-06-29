@@ -27,8 +27,8 @@ class NodeClass():
         }   # max linear speed per axis
 
         self.p_max_ang_speed = {
-            'x': 0.25,  # in [rad/s]
-            'y': 0.85,  # in [rad/s]
+            'x': 0.3,  # in [rad/s]
+            'y': 0.3,  # in [rad/s]
             'z': 1.5*0.3491   # in [rad/s]
         }   # max rotational speed per axis
 

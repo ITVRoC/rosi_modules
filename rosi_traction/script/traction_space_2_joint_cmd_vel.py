@@ -78,9 +78,6 @@ class NodeClass():
                 
                 # only runs if a valid flippers touch status message has been received
                 if self.msg_v_Pi_V is not None and self.msg_flpTouchStatus is not None and self.msg_n_cp is not None:
-                    
-                    #for i in range(self.msg_v_Pi_V.vec):
-                    #    self.msg_v_Pi_V.vec[i].z = 0.0
 
                     # preparing the contact plane vector
                     n_cp = np.array([self.msg_n_cp.vector.x, self.msg_n_cp.vector.y, self.msg_n_cp.vector.z]).reshape(3,1)
@@ -111,7 +108,7 @@ class NodeClass():
                             if cos_theta != 0:
                                 v_x_Pi = (v_Pi_norm / cos_theta)[0][0]
                             else:
-                                v_x_Pi = 0  
+                                v_x_Pi = 0.0  
 
                             # prepares the velocity input for the traction joint
                             #v_Pi_v = np.array([v_Pi.x, v_Pi.y, v_Pi.z]).reshape(3,1)

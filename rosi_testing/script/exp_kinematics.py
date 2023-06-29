@@ -28,7 +28,7 @@ class NodeClass():
 
         ##=== Parameters
 
-        # base velocities to apply
+        # base velocities to applys
         self.vl = [0.0, 0.0, 0.0]
         self.va = [0.0, 0.0, 0.0]
 
@@ -71,7 +71,8 @@ class NodeClass():
         # header for the saving file
         self.saveFile_header = ['time', 
                                 'in_vl_x', 'in_vl_y', 'in_vl_z', 'in_va_x', 'in_va_y', 'in_va_z',
-                                'gt_dq_pw', 'gt_dq_px', 'gt_dq_py', 'gt_dq_pz', 'gt_dq_dw', 'gt_dq_dx', 'gt_dq_dy', 'gt_dq_dz']
+                                'gt_dq_pw', 'gt_dq_px', 'gt_dq_py', 'gt_dq_pz', 'gt_dq_dw', 'gt_dq_dx', 'gt_dq_dy', 'gt_dq_dz',
+                                'p_marker_x', 'p_marker_y', 'p_marker_z']
 
         
         ##=== ROS interfaces
@@ -98,50 +99,51 @@ class NodeClass():
                 # node rate sleep
                 node_rate_sleep = rospy.Rate(self.p_rateSleep)
 
-                # applies the velocity to joints before starting measurement so motion enters in steady state.
+                # applies the velocity to joints before starting measurement so measurements begin in steady state.
                 rospy.loginfo('Applying velocity.')
                 f4_time_spent = rospy.Duration(0)
                 f4_time_ini = rospy.get_rostime()
                 while f4_time_spent < rospy.Duration(1):
                     m = self.createTwistMsg(self.vl, self.va)
                     self.pub_baseCmdVel.publish(m)
-                    node_rate_sleep.sleep()
                     f4_time_spent = rospy.get_rostime() - f4_time_ini
-
-                # variables ini
-                time_ini = rospy.get_rostime()
-                test_time = rospy.Duration.from_sec(0)
-                #time_last = time_ini
+                    node_rate_sleep.sleep()
 
                 # logging variable
                 log_data = []
 
                 rospy.loginfo('Initiating measurements...')
+                flag_firstRun = True
+                test_time = rospy.Duration.from_sec(0)
                 while self.p_timeToApplyTwist > test_time:
 
-                    # retrieving current ros time
-                    time_current = rospy.get_rostime()
-
-                    # computing the delta time
-                    #dt = (time_current - time_last).to_sec()
-
+                    # treats time
+                    if flag_firstRun:
+                        time_ini = self.basePoseGT_msg.header.stamp
+                        flag_firstRun = False
+                    else:
+                        test_time = self.basePoseGT_msg.header.stamp - time_ini
+                        
                     # applies the test velocity
                     m = self.createTwistMsg(self.vl, self.va)
                     self.pub_baseCmdVel.publish(m)
-                    
+
+                    # saving the marker point as a vector
+                    p_marker_vec = [self.basePoseGT_msg.transform.translation.x, 
+                                    self.basePoseGT_msg.transform.translation.y, 
+                                    self.basePoseGT_msg.transform.translation.z]
+
                     # obtaining the vicon marker pose
                     pose_marker_dq = self.twist2Dq(self.basePoseGT_msg)
 
                     # obtains {R} pose from the vicon marker pose
                     pose_r_dq_curr = getBasePoseFromMarkerDq(pose_marker_dq)
 
-                    # test delayed time
-                    test_time = time_current - time_ini
-
                     # saving velocity values to the log variable
                     log_data.append([test_time.to_sec()] 
                                     + self.vl + self.va
-                                    + pose_r_dq_curr.vec8().tolist())
+                                    + pose_r_dq_curr.vec8().tolist()
+                                    + p_marker_vec)
 
                     # sleeps the node
                     node_rate_sleep.sleep()
