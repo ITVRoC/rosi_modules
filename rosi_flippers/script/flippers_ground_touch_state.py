@@ -5,6 +5,8 @@ It considers that flippers are in the extended semi-circle (pointing outwards co
 '''
 import rospy
 
+import numpy as np
+
 from collections import deque
 
 from rosi_common.msg import Int8ArrayStamped
@@ -32,6 +34,12 @@ class NodeClass():
 
         # number of last torque readings to perform the avg value of last received torque data
         self.torqueAvgQtd = 10
+
+        # flipper joint position range within the touch inference is made. Outside it, we consider wheels as touching the ground.
+        self.flpJnt_inferenceRange = {
+            'min': np.deg2rad(50),
+            'max': np.deg2rad(180)
+        }
 
         ##=== Useful variables
         # node status object
@@ -96,6 +104,7 @@ class NodeClass():
                     self.dt = time_current - self.time_last
                 self.time_last = time_current
 
+
                 # using received message to compute flippers state
                 if self.flpMsg == None: # it means no message has been received
                     ret = [-1]*4
@@ -119,10 +128,16 @@ class NodeClass():
                         ret = [-1]*4
                     else:   # condition when there is a received valid value within time window
 
+                        # flippers joint position
+                        flpJnt_pos_l = correctFlippersJointSignal(self.flpMsg.position[4:])
+
+
+                        #self.flpJnt_inferenceRange
+
                         # current torque reading
                         torque_sigFixed = correctFlippersJointSignal(list(self.flpMsg.effort[4:])) # only last 4 torque values are flipper ones
 
-                        # adding torque values to the log
+                        # adding current torque values to the torques log
                         for torque_val, torque_log in zip(torque_sigFixed, self.torque_log_l):
                             torque_log.append(torque_val)
 
@@ -130,11 +145,21 @@ class NodeClass():
                         # only executes when the proper number of torque values have been received
                         if len(self.torque_log_l[0]) >= self.torqueAvgQtd:
 
-                            # computes the average of n last torque values
-                            torque_avg = [sum(list(torque_log_i))/self.torqueAvgQtd for torque_log_i in self.torque_log_l]
+                            ret = []
+                            for jTorqueLog, jPos  in zip(self.torque_log_l, flpJnt_pos_l):
 
-                            # estimates the contact based on the torque average sign
-                            ret = [0 if torque_avg_i < self.torqueThreshold else 1 for torque_avg_i in torque_avg]
+                                pass
+
+                                if self.flpJnt_inferenceRange['min'] < jPos and jPos < self.flpJnt_inferenceRange['max']:
+
+                                    # computes the average of n last torque values
+                                    torque_avg = sum(list(jTorqueLog))/self.torqueAvgQtd 
+
+                                     # estimates the contact based on the torque average sign
+                                    ret.append(0) if torque_avg < self.torqueThreshold else ret.append(1)
+                                
+                                else:   # in case of flippers outside the region to estimate the touch
+                                    ret.append(0)                           
 
                         else: # in case of not enough values have been received
                             ret = 4*[-1] # sends a invalid value
@@ -146,8 +171,7 @@ class NodeClass():
                 m.header.frame_id = 'flippers_ground_touch_state'
                 m.data = ret
                 self.pub_touchStatus.publish(m)
-
-                print(m)
+                #print(m)
 
             # sleeps the node
             node_rate_sleep.sleep()
