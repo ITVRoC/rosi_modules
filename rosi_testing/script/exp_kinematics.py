@@ -17,7 +17,7 @@ import os
 from rosi_common.msg import TwistStamped
 from geometry_msgs.msg import TransformStamped
 
-from rosi_common.dq_tools import trAndOri2dq, dq2rpy, dqExtractTransV3
+from rosi_common.dq_tools import twist2Dq
 from rosi_common.vicon_tools import getBasePoseFromMarkerDq
 
 class NodeClass():
@@ -30,7 +30,7 @@ class NodeClass():
 
         # base velocities to applys
         self.vl = [0.0, 0.0, 0.0]
-        self.va = [0.0, 0.0, 0.0]
+        self.va = [0.0, 0.0873, 0.0]
 
         # node rate sleep [Hz]
         self.p_rateSleep = 50
@@ -134,7 +134,7 @@ class NodeClass():
                                     self.basePoseGT_msg.transform.translation.z]
 
                     # obtaining the vicon marker pose
-                    pose_marker_dq = self.twist2Dq(self.basePoseGT_msg)
+                    pose_marker_dq = twist2Dq(self.basePoseGT_msg)
 
                     # obtains {R} pose from the vicon marker pose
                     pose_r_dq_curr = getBasePoseFromMarkerDq(pose_marker_dq)
@@ -161,16 +161,6 @@ class NodeClass():
     def cllbck_basePoseGT(self, msg):
         '''Callback for the ROSI base twist'''
         self.basePoseGT_msg = msg
-
-
-    @staticmethod
-    def twist2Dq(twist):
-        '''Returns the base position as a numpy array
-        Output
-            - a <nd.array> element with the chassis base position'''
-        tr = [twist.transform.translation.x, twist.transform.translation.y, twist.transform.translation.z]
-        ori_q = [twist.transform.rotation.w, twist.transform.rotation.x, twist.transform.rotation.y, twist.transform.rotation.z]
-        return trAndOri2dq(tr, ori_q, 'trfirst')
 
     
     @staticmethod

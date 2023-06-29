@@ -337,3 +337,16 @@ def dqElementwiseMul(qa, qb):
     a_qa = qa.vec8()
     a_qb = qb.vec8()
     return DQ(np.multiply(a_qa, a_qb).tolist())
+
+
+
+def twist2Dq(twist):
+    '''Converts a ROS twist message to the dual-quaternion format
+    Input
+        - twist <geometry_msgs/Twist>: The twist ROS message
+    Output
+        the rescpetive pose in <dq> format'''
+    
+    tr = [twist.transform.translation.x, twist.transform.translation.y, twist.transform.translation.z]
+    ori_q = [twist.transform.rotation.w, twist.transform.rotation.x, twist.transform.rotation.y, twist.transform.rotation.z]
+    return trAndOri2dq(tr, ori_q, 'trfirst')

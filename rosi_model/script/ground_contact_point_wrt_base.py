@@ -123,9 +123,10 @@ class NodeClass():
                         dq_pi_qi = angleAxis2dqRot(jointPos, [0,1,0]) # rotation between Pi and Qi is always about y axis
 
                         #-- first flipper contact point candidate: elbow
+                        # REMOVED THE SECOND CANDIDATE
                         # changing representation of elbow contact point from Qi to Pi
-                        dq_pi_cp_elbow = dq_pi_qi * dq_qi_flpContactElbow[key]
-                        v_pi_cp_candidate_l.append(dqExtractTransV3(dq_pi_cp_elbow))
+                        #dq_pi_cp_elbow = dq_pi_qi * dq_qi_flpContactElbow[key]
+                        #v_pi_cp_candidate_l.append(dqExtractTransV3(dq_pi_cp_elbow))
 
 
 
