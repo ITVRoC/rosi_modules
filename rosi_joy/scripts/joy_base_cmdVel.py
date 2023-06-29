@@ -4,6 +4,8 @@ It receives joy input and generates a Twist for the ROSI base.
 '''
 import rospy
 
+import numpy as np
+
 from rosi_common.msg import TwistStamped
 from sensor_msgs.msg import Joy
 
@@ -21,15 +23,15 @@ class NodeClass():
         #==== Parameters
         # parameters
         self.p_max_lin_speed = {
-            'x': 0.7, # in [m/s] -- 1.1 is the so far maximum
+            'x': 0.5, # in [m/s] -- 1.1 is the so far maximum
             'y': 0.0, # in [m/s]
-            'z': 0.04 # in [m/s]
+            'z': 0.09 # in [m/s]
         }   # max linear speed per axis
 
         self.p_max_ang_speed = {
-            'x': 0.3,  # in [rad/s]
-            'y': 0.3,  # in [rad/s]
-            'z': 1.5*0.3491   # in [rad/s]
+            'x': np.deg2rad(10),  # in [rad/s]
+            'y': np.deg2rad(10),  # in [rad/s]
+            'z': np.deg2rad(40)   # in [rad/s]
         }   # max rotational speed per axis
 
         # contant linear forward velocity

@@ -27,16 +27,11 @@ class NodeClass():
         '''Class constructor'''
         self.node_name = node_name
 
-        ##== Parameters
-        self.v_x_flprs = np.array([1, 0, 0])    # flippers vertical axis
-        self.p_ctrl_kp = 0.2
-
 
         ##== Useful variables
         # node status object
         self.ns = nodeStatus(node_name)
 
-        self.v_corrDirVec = [[0,0,0],[0,0,0],[0,0,0],[0,0,0]] # initially, there is no correction to make, until some signal is received
         self.v_z_P_l = None
         self.msg_q_Pi_cp = None
 
@@ -52,7 +47,7 @@ class NodeClass():
         ##== One-time calculations
 
         # list of {Qi} frames rotation matrix wrt {Pi}
-        self.rotm_qi_pi_l = 4*[rotm_qi_pi]
+        self.rotm_qi_pi_l = [rotm_qi_pi, rotm_qi_pi, rotm_qi_pi, rotm_qi_pi]
 
         ##== ROS interfaces
 
