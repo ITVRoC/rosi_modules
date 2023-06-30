@@ -56,7 +56,7 @@ class NodeClass():
 
         # subscribers
         sub_cmdVel_cmdVelVzPi = rospy.Subscriber('/rosi/flippers/space/cmd_v_z', Vector3ArrayStamped, self.cllbck_cmdVelVzPi)
-        sub_contactPointPi = rospy.Subscriber('/rosi/model/contact_point_wrt_pi', Vector3ArrayStamped, self.cllbck_contactPointPi)
+        sub_contactPointPi = rospy.Subscriber('/rosi/model/flipper_tip_wrt_pi', Vector3ArrayStamped, self.cllbck_contactPointPi)
 
         # services
         srv_getStatus = rospy.Service(self.ns.getSrvPath('getNodeStatus', rospy), GetNodeStatusList, self.srvcllbck_getStatus)
@@ -84,6 +84,9 @@ class NodeClass():
 
                 # only runs if valid messages have been received from topics
                 if self.v_z_P_l is not None and self.msg_q_Pi_cp is not None:
+
+                    if self.v_z_P_l.vec[0].z == 0.09:
+                        pass
 
                     # converting contact points to numpy format
                     p_Pi_cp_l = [np.array([p.x, p.y, p.z]) for p in self.msg_q_Pi_cp.vec]

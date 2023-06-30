@@ -63,6 +63,7 @@ class NodeClass():
         self.pub_cntctPntBase = rospy.Publisher('/rosi/model/contact_point_wrt_base', Vector3ArrayStamped, queue_size=5)
         self.pub_cntctPntPi = rospy.Publisher('/rosi/model/contact_point_wrt_pi', Vector3ArrayStamped, queue_size=5)
         self.pub_gvector = rospy.Publisher('/rosi/model/grav_vec_wrt_frame_r', Vector3Stamped, queue_size=5)
+        self.pub_flpTipVec = rospy.Publisher('/rosi/model/flipper_tip_wrt_pi', Vector3ArrayStamped, queue_size=5)
 
         # subscribers
         #sub_flpTouchState = rospy.Subscriber('/rosi/flippers/status/touching_ground', Int8ArrayStamped, self.cllbck_flpTouchState)
@@ -106,7 +107,7 @@ class NodeClass():
 
                     # numpy vector array with accumulating contact points
                     dq_Pi_cp = []
-
+                    v_pi_flpTip = []
                     
                     for key, jointPos in zip(propKeys, flp_pos):  # iterates for all four propellants
 
@@ -122,12 +123,12 @@ class NodeClass():
                         # dual-quaternion of frame Qi w.r.t. Pi (its a rotation around z of the flipper joint value)
                         dq_pi_qi = angleAxis2dqRot(jointPos, [0,1,0]) # rotation between Pi and Qi is always about y axis
 
+
                         #-- first flipper contact point candidate: elbow
                         # REMOVED THE SECOND CANDIDATE
                         # changing representation of elbow contact point from Qi to Pi
-                        #dq_pi_cp_elbow = dq_pi_qi * dq_qi_flpContactElbow[key]
-                        #v_pi_cp_candidate_l.append(dqExtractTransV3(dq_pi_cp_elbow))
-
+                        dq_pi_cp_elbow = dq_pi_qi * dq_qi_flpContactElbow[key]
+                        v_pi_cp_candidate_l.append(dqExtractTransV3(dq_pi_cp_elbow))
 
 
                         ##-- Touch point candidadte #3: The flipper tip
@@ -148,8 +149,11 @@ class NodeClass():
 
                         # expressing the second candidate in pi frame
                         dq_pi_cp2 = dq_pi_qi * tr2dq(v_qi_cp2)
-                        v_pi_cp_candidate_l.append(dqExtractTransV3(dq_pi_cp2))
+                        v_pi_cp2 = dqExtractTransV3(dq_pi_cp2)
+                        v_pi_cp_candidate_l.append(v_pi_cp2)
 
+                        # saving the flipper tip vector for publishing
+                        v_pi_flpTip.append(v_pi_cp2)
 
                         ##-- Deciding which is the farthest from rosi base
                         # projects candidates to g vector
@@ -161,6 +165,7 @@ class NodeClass():
 
                         # append the elected contact point candidate to the final list
                         dq_Pi_cp.append(tr2dq(v_pi_cp_candidate_l[proj_max_index]))
+
 
 
                     # transforming contact point w.r.t. Pi  to frame R 
@@ -200,6 +205,13 @@ class NodeClass():
                     m.vector.y = q_r_g.components[2]
                     m.vector.z = q_r_g.components[3]
                     self.pub_gvector.publish(m)
+
+                    # publishing the flipper tip vector wrt {Pi}
+                    m = Vector3ArrayStamped()
+                    m.header.stamp = time_current
+                    m.header.frame_id = self.node_name
+                    m.vec = [Vector3(p[0], p[1], p[2]) for p in v_pi_flpTip]
+                    self.pub_flpTipVec.publish(m)
 
             # sleeps the node
             node_rate_sleep.sleep()
