@@ -4,7 +4,7 @@ import rospy
 
 import numpy as np
 
-from rosi_common.dq_tools import DualQuaternionStampedMsg2dq
+from rosi_common.dq_tools import DualQuaternionStampedMsg2dq, dq2rpy, dqExtractTransV3
 
 from rosi_common.msg import DualQuaternionStamped
 from geometry_msgs.msg import TransformStamped
@@ -23,6 +23,9 @@ class NodeClass():
 
         # desired control type
         self.ctrlTypeDes = "orientation"
+
+        # dof to evaluate the error
+        self.errorMit_dof = 'rot_x'  # possible values are 'tr_z', 'rot_x' and 'rot_y'
 
         ##------- Home set-points
         # position home set-point
@@ -90,7 +93,15 @@ class NodeClass():
         # defaul sleep time after service calls
         self.slpSrvCll = 0.1
 
+        # time window that the error should be above this threshold so we consider that the objective has been atteint
+        self.error_time_window = rospy.Duration.from_sec(4)
         
+        # threshold for considering the error as acceptable
+        self.threshold = {
+            'tr_z': 0.001,
+            'rot_x': np.deg2rad(1),
+            'rot_y': np.deg2rad(1) 
+        }
 
         ##=== Useful variables
 
@@ -159,32 +170,27 @@ class NodeClass():
                 self.setBulkSP(self.sp_tr_home, self.sp_ori_home, self.sp_muF_home, self.sp_muG_home) 
 
                 # condition for going to another point
-                rospy.sleep(3)
+                self.waitErrorMitigation()
 
                 # going to SP1
                 rospy.loginfo('[%s] Going to P1.', self.node_name)
                 self.setBulkSP(self.sp_tr['p1'], self.sp_ori['p1'], self.sp_muF['p1'], self.sp_muG['p1'])
 
-                # condition for going to another point
-                while not rospy.is_shutdown():
-                    DualQuaternionStampedMsg2dq(self.ctrl_basePoseError)
-                    node_rate_sleep.sleep()
-
-                #rospy.sleep(3)
+                self.waitErrorMitigation()
 
                 # going to SP2
                 rospy.loginfo('[%s] Going go P2.', self.node_name)
                 self.setBulkSP(self.sp_tr['p2'], self.sp_ori['p2'], self.sp_muF['p2'], self.sp_muG['p2'])
 
                 # condition for going to another point
-                rospy.sleep(3)
+                self.waitErrorMitigation()
 
                 # going to back SP1
                 rospy.loginfo('[%s] Going back to P1.', self.node_name)
                 self.setBulkSP(self.sp_tr['p1'], self.sp_ori['p1'], self.sp_muF['p1'], self.sp_muG['p1'])
 
                 # condition for going to another point
-                rospy.sleep(3)
+                self.waitErrorMitigation()
 
                 # sending the robot to home position
                 rospy.loginfo('[%s] Going to Home pose.', self.node_name)
@@ -270,6 +276,45 @@ class NodeClass():
         # sending to the controller node the Ground Distance mu function set-point
         self.srvPrx_setMuGrndDst_dstSp(muGsp)
 
+
+    def waitErrorMitigation(self):
+        '''Forces the code to wait until the error is within an acceptable range'''
+
+        # initializing variables
+        time_windowIni = self.ctrl_basePoseError.header.stamp
+
+        while not rospy.is_shutdown():
+                
+            # current time
+            time_curr = self.ctrl_basePoseError.header.stamp
+
+            # extracting error components
+            auxdq = DualQuaternionStampedMsg2dq(self.ctrl_basePoseError)
+            rpy = dq2rpy(auxdq)
+            tr = dqExtractTransV3(auxdq)
+
+            # figures out the current error variable and its threshold
+            if self.errorMit_dof == 'tr_z':
+                e = tr[0]
+                threshold = self.threshold['tr_z']
+            elif self.errorMit_dof == 'rot_x':
+                e = rpy[0]
+                threshold = self.threshold['rot_x']
+            elif self.errorMit_dof == 'rot_y':
+                e = rpy[1]
+                threshold = self.threshold['rot_y']
+
+
+            # if the error is above the threshold, the error time count zerates
+            if e > threshold:
+                time_windowIni = time_curr
+
+            # in case of the error is below the threshold
+            else:
+                # verifies if the error is below a threshold for long enough
+                if time_curr - time_windowIni > self.error_time_window:
+                    rospy.loginfo('[%s] error objective achieved.', self.node_name)
+                    break
 
 
 if __name__ == '__main__':
