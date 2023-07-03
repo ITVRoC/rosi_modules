@@ -28,6 +28,9 @@ class NodeClass():
 
         ##==== PARAMETERS ============================================
 
+        # node rate sleep [Hz]
+        self.p_rateSleep = 50
+
         #----------------- SET-POINT ------------------------------
         # orientation
         x_sp_ori_rpy = np.deg2rad([0, 0, 0]) # final vector is in radians RPY
@@ -127,7 +130,7 @@ class NodeClass():
         self.pub_dqPoseCurr = rospy.Publisher('/chassis_control/pose_current', DualQuaternionStamped, queue_size=5)
         self.pub_dqSetPoint = rospy.Publisher('/chassis_control/pose_sp', DualQuaternionStamped, queue_size=5)
         self.pub_dqError = rospy.Publisher('/chassis_control/pose_error', DualQuaternionStamped, queue_size=5)
-        self.pub_dqSP = rospy.Publisher('/chassis_control/sp_dq', DualQuaternionStamped, queue_size=5)
+        self.pub_gain_dq = rospy.Publisher('/chassis_control/gain_dq', DualQuaternionStamped, queue_size=5)
 
         # subscribers
         sub_imu = rospy.Subscriber('/sensor/imu_corrected', Imu, self.cllbck_imu)
@@ -166,7 +169,7 @@ class NodeClass():
         '''Node main method'''
 
         # defining the eternal loop rate
-        node_rate_sleep = rospy.Rate(20)
+        node_rate_sleep = rospy.Rate(self.p_rateSleep)
 
         rospy.loginfo('[%s] Entering in ethernal loop.', self.node_name)
         while not rospy.is_shutdown():
@@ -295,7 +298,7 @@ class NodeClass():
 
                     # controller gain
                     m = self.dq2DualQuaternionStampedMsg(self.kp_a_dq , ros_time, self.node_name)
-                    self.pub_dqSP.publish(m)
+                    self.pub_gain_dq.publish(m)
 
             # sleeping the node
             node_rate_sleep.sleep()
