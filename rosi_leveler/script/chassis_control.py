@@ -8,7 +8,7 @@ import numpy as np
 import quaternion
 from dqrobotics import *
 
-from rosi_common.dq_tools import quat2rpy, rpy2quat, trAndOri2dq, dqElementwiseMul, dq2trAndQuatArray, dqExtractTransV3, dq2rpy
+from rosi_common.dq_tools import quat2rpy, rpy2quat, trAndOri2dq, dqElementwiseMul, dq2trAndQuatArray, dqExtractTransV3, dq2rpy, quatAssurePosW
 from rosi_common.rosi_tools import correctFlippersJointSignal, compute_J_ori_dagger, compute_J_art_dagger
 from rosi_common.node_status_tools import nodeStatus
 from rosi_model.rosi_description import tr_base_piFlp
@@ -17,7 +17,7 @@ from rosi_common.msg import Float32Array, Vector3ArrayStamped, DualQuaternionSta
 from sensor_msgs.msg import Imu, JointState
 from geometry_msgs.msg import Vector3
 
-from rosi_common.srv import SetNodeStatus, GetNodeStatusList, setPoseSetPointVec, setPoseCtrlGain, getPoseCtrlGain, getPoseSetPointVec, SetInt, SetIntResponse, GetInt, GetIntResponse
+from rosi_common.srv import SetNodeStatus, GetNodeStatusList, setPoseSetPointVec, setPoseCtrlGain, getPoseCtrlGain, getPoseSetPointVec, SetInt, SetIntResponse, GetInt, GetIntResponse, SetFloat, SetFloatResponse, GetFloat, GetFloatResponse
 
 
 class NodeClass():
@@ -44,12 +44,21 @@ class NodeClass():
         kp_tr_v = [1.0, 1.0, 0.8]
 
 
-        #------ Mu function for the null-space controller parameters
+        #------ Mu function for the Flippers lever angle optimization function
         # propulsion joints angular set-point for the null-space
-        self.flpJointPosSp_l = 4*[np.deg2rad(110)]
+        self.muf_flpJointPosSp_l = 4*[np.deg2rad(110)]
 
         # mu function gain
-        self.kmu_l = 4*[0.3]
+        self.muf_kmu_l = 4*[0.3]
+
+
+        #------ Mu function for the Chassis ground height optimization function
+        # mu function gain 
+        self.mug_kmu_l = 1
+
+        # ground distance set-point
+        self.mug_grndDstncSp_l = 0.25
+
 
         #---- Clipping 
         # value for clipping the command if it is to small (below the variable)
@@ -57,7 +66,6 @@ class NodeClass():
 
 
         #---- Divers
-
         # rosi direction side
         self.drive_side_param_path = '/rosi/forward_side'
         self.drive_side = self.getParamWithWait(self.drive_side_param_path)
@@ -66,7 +74,7 @@ class NodeClass():
         ##=== Useful variables
         # node status object
         self.ns = nodeStatus(node_name)
-        #self.ns.resetActive() # this node is disabled by default
+        self.ns.resetActive() # this node is disabled by default
 
         # ROS topic message variables
         self.msg_grndDist = None
@@ -76,11 +84,12 @@ class NodeClass():
         # Available control types
         self.chassisCtrlType = {
             "orientation": 1,
-            "orientationNullSpace": 2,
-            "articulation": 3
+            "orientationNullSpace_FlpJnt": 2,
+            "orientationNullSpace_GrndHght": 3,
+            "articulation": 4
         }
 
-        # current control type
+        # default control type
         self.ctrlType_curr = self.chassisCtrlType['orientation']
 
         # for storing joints and w function last values
@@ -134,9 +143,20 @@ class NodeClass():
         srv_setPoseCtrlGain = rospy.Service(self.node_name+'/set_pose_ctrl_gain', setPoseCtrlGain, self.srvcllbck_setPoseCtrlGain) 
         srv_setCtrlType = rospy.Service(self.node_name+'/set_ctrl_type', SetInt, self.srvcllbck_setCtrlType) 
 
+        srv_setMuFGain = rospy.Service(self.node_name+'/set_mu_flp_gain', SetFloat, self.srvcllbck_setMuFGain)  
+        srv_setMuFJntSetPoint = rospy.Service(self.node_name+'/set_mu_flp_set_point', SetFloat, self.srvcllbck_setMuFJntSetPoint )   
+        srv_setMuGGain = rospy.Service(self.node_name+'/set_mu_grndist_gain', SetFloat, self.srvcllbck_setMuGGain)  
+        srv_setMuGVertDistSetPoint = rospy.Service(self.node_name+'/set_mu_grndist_set_point', SetFloat, self.srvcllbck_setMuGVertDistSetPoint)   
+
         srv_getPoseSetPoint = rospy.Service(self.node_name+'/get_pose_set_point', getPoseSetPointVec, self.srvcllbck_getPoseSetPoint) 
         srv_getPoseCtrlGain = rospy.Service(self.node_name+'/get_pose_ctrl_gain', getPoseCtrlGain, self.srvcllbck_getPoseCtrlGain) 
         srv_getCtrlType = rospy.Service(self.node_name+'/get_ctrl_type', GetInt, self.srvcllbck_getCtrlType)
+
+        srv_getMuFGain = rospy.Service(self.node_name+'/get_mu_flp_gain', GetFloat, self.srvcllbck_getMuFGain)  
+        srv_getMuFJntSetPoint = rospy.Service(self.node_name+'/get_mu_flp_set_point', GetFloat, self.srvcllbck_getMuFJntSetPoint )   
+
+        srv_getMuGGain = rospy.Service(self.node_name+'/get_mu_grndist_gain', GetFloat, self.srvcllbck_getMuGGain) 
+        srv_getMuGVertDistSetPoint = rospy.Service(self.node_name+'/get_mu_grndist_set_point', GetFloat, self.srvcllbck_getMuGVertDistSetPoint)   
 
         # Node main
         self.nodeMain()
@@ -159,9 +179,9 @@ class NodeClass():
 
                     #=== Required computations independently of the current control mode
                     # setting the imu ROS data in the numpy quaternion format
-                    q_imu = np.quaternion(self.msg_imu.orientation.w, self.msg_imu.orientation.x, self.msg_imu.orientation.y, self.msg_imu.orientation.z)
+                    q_imu = quatAssurePosW(  np.quaternion(self.msg_imu.orientation.w, self.msg_imu.orientation.x, self.msg_imu.orientation.y, self.msg_imu.orientation.z)  )
 
-                    # computing the chassis orientation state without the yaw component
+                    # defining the chassis orientation state as the IMU reading without the yaw component
                     rpy = quat2rpy(q_imu)
                     q_yawcorr = rpy2quat([0, 0, rpy[2]])
                     q_yawcorr = np.quaternion(q_yawcorr[0], q_yawcorr[1], q_yawcorr[2], q_yawcorr[3])
@@ -170,10 +190,11 @@ class NodeClass():
                     # defining the articulation pose state
                     x_a_R_dq = trAndOri2dq([0, 0, self.msg_grndDist.vec[0].z], x_o_R_q, 'trfirst')
 
-
                     #=== Control modes implementation
                     # If the control mode is orientation
-                    if self.ctrlType_curr == self.chassisCtrlType['orientation'] or self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace']:
+                    if self.ctrlType_curr == self.chassisCtrlType['orientation'] \
+                        or self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_FlpJnt'] \
+                        or self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_GrndHght']:
                         
                         # computing the orientation error
                         e_o_R_q = self.x_sp_ori_q.conj() * x_o_R_q
@@ -183,14 +204,28 @@ class NodeClass():
                         u_o_R_v = np.array([u_o_R_q[1], u_o_R_q[2]]).reshape(2,1)
                         u_Pi_v =  np.dot(self.J_ori_dagger, u_o_R_v)
 
-                        # if the joints optimization is enabled, computes the null space component if this control mode is enabled
-                        if self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace']:
 
-                            # treating flippers position
-                            flpJPos_l = correctFlippersJointSignal(self.msg_jointState.position[4:])
+                        # treats the case when the null-space optimization control mode is enabled
+                        if self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_FlpJnt'] or \
+                           self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_GrndHght']:
 
-                            # computing the null-space projector function component
-                            mu = np.array([ ki * (jsp - jcurr) for jcurr, jsp, ki in zip(flpJPos_l, self.flpJointPosSp_l, self.kmu_l)]).reshape(4,1)
+
+                            # computes the mu function for the Flippers lever angle optimization function case
+                            if self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_FlpJnt']:
+
+                                # treating flippers position
+                                flpJPos_l = correctFlippersJointSignal(self.msg_jointState.position[4:])
+
+                                # computing mu function
+                                mu = np.array([ ki * (jsp - jcurr) for jcurr, jsp, ki in zip(flpJPos_l, self.muf_flpJointPosSp_l, self.muf_kmu_l)]).reshape(4,1)
+
+
+                             # computes the mu function for the Chassis ground height optimization function case
+                            elif self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_GrndHght']:
+                        
+                                # computing the mu function
+                                mu = np.array( 4* [self.mug_kmu_l * (self.mug_grndDstncSp_l - self.msg_grndDist.vec[0].z) ] ).reshape(4,1)
+
 
                             # computing the null-space projector control signal component
                             aux_u = np.dot(self.J_ori_nsproj, mu)
@@ -221,10 +256,6 @@ class NodeClass():
                     # If the selected control mode is invalid
                     else:
                         u_Pi_v = np.array([0, 0, 0, 0]).reshape(4,1)
-                    
-
-                    # clipping the command if it is below a threshold
-                    u_Pi_v = [u[0] if u[0] > self.u_Pi_clip_threshold else 0.0 for u in u_Pi_v]    
 
 
                     #=== Publishing the ROS message for the controller
@@ -252,10 +283,13 @@ class NodeClass():
                     self.pub_dqSetPoint.publish(m)
 
                     # pose error
-                    if self.ctrlType_curr == self.chassisCtrlType['orientation'] or self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace']:
+                    if self.ctrlType_curr == self.chassisCtrlType['orientation'] \
+                        or self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_FlpJnt'] \
+                        or self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_GrndHght']:
                         # creates the dual quaternion error if it still does not exists (in case of orientation control)
                         aux = e_o_R_q.components
                         e_a_R_dq = DQ(aux[0], aux[1], aux[2], aux[3], 0, 0, 0, 0)
+
                     m = self.dq2DualQuaternionStampedMsg(e_a_R_dq, ros_time, self.node_name)
                     self.pub_dqError.publish(m)
 
@@ -357,6 +391,51 @@ class NodeClass():
         ret = GetIntResponse()
         ret.ret = int(self.ctrlType_curr)
         return ret
+
+    
+    def srvcllbck_setMuFGain(self, req):
+        ''' Method for setting the flippers mu function gain'''
+        self.muf_kmu_l = 4*[req.value]
+        return SetFloatResponse(float(self.muf_kmu_l[0]))
+
+
+    def srvcllbck_setMuFJntSetPoint(self, req):
+        '''Method for setting the flippers mu function set-point'''
+        self.muf_flpJointPosSp_l = 4 * [req.value]
+        return SetFloatResponse(float(self.muf_flpJointPosSp_l[0]))
+
+
+    def srvcllbck_setMuGGain(self, req):
+        '''Method for setting the ground distance mu function gain'''
+        self.mug_kmu_l = req.value
+        return SetFloatResponse(self.mug_kmu_l)
+    
+
+    def srvcllbck_setMuGVertDistSetPoint(self, req):
+        ''' Method for setting the ground distance mu function set-point'''
+        self.mug_grndDstncSp_l = req.value
+        return SetFloatResponse(self.mug_grndDstncSp_l)
+
+    
+    def srvcllbck_getMuFGain(self, req):
+        ''' Method for getting the flipper mu function gain'''
+        return GetFloatResponse(self.muf_kmu_l[0])
+
+    
+    def srvcllbck_getMuFJntSetPoint(self, req):
+        ''' Method for getting the flipper mu function set-point'''
+        return GetFloatResponse(self.muf_flpJointPosSp_l[0])
+
+
+    def srvcllbck_getMuGGain(self, req):
+        ''' Method for getting the ground-distance mu function gain'''
+        return GetFloatResponse(self.mug_kmu_l)
+
+    
+    def srvcllbck_getMuGVertDistSetPoint(self, req):
+        ''' MEthof for getting the ground-distance mu function set-point'''
+        return GetFloatResponse(self.mug_grndDstncSp_l)
+
        
 
     #=== Static methods

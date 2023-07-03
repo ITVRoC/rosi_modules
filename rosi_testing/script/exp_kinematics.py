@@ -29,11 +29,11 @@ class NodeClass():
         ##=== Parameters
 
         # base velocities to applys
-        self.vl = [0.0, 0.0, 0.0]
-        self.va = [0.0, 0.0, np.deg2rad(20)]
+        self.vl = [0.15, 0.0, 0.0]
+        self.va = [0.0, 0.0, 0.0]
 
         # node rate sleep [Hz]
-        self.p_rateSleep = 50
+        self.p_rateSleep = 20
 
         # time to apply the command to the base
         self.p_timeToApplyTwist = rospy.Duration.from_sec(2)

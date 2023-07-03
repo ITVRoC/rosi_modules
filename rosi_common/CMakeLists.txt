@@ -75,6 +75,8 @@ add_service_files(
     GetNodeStatus.srv
     getPoseCtrlGain.srv 
     getPoseSetPointVec.srv
+    SetFloat.srv
+    GetFloat.srv
 )
 
 ## Generate actions in the 'action' folder
