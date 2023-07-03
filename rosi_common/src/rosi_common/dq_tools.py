@@ -10,6 +10,8 @@ import quaternion
 
 from rosi_common.math_tools import *
 
+from rosi_common.msg import DualQuaternionStamped
+
 def rpy2dq(v_in):
     '''Converts a 3x1 np.array containing RPY angles in radians to a pure rotation dual-quaternion format'''
 
@@ -350,3 +352,28 @@ def twist2Dq(twist):
     tr = [twist.transform.translation.x, twist.transform.translation.y, twist.transform.translation.z]
     ori_q = [twist.transform.rotation.w, twist.transform.rotation.x, twist.transform.rotation.y, twist.transform.rotation.z]
     return trAndOri2dq(tr, ori_q, 'trfirst')
+
+
+def dq2DualQuaternionStampedMsg(dq, ros_time, frame_id):
+    '''Converts a dual-quaternion variable into a ROS DualQuaternionStamped message
+    Input
+        - dq<DQ>: the dual quaternion variable
+    Output
+        - an object <DualQuaternionStamped> as a ROS message.'''
+    aux = dq.vec8()
+    m = DualQuaternionStamped()
+    m.header.stamp = ros_time
+    m.header.frame_id = frame_id
+    m.wp = aux[0]
+    m.xp = aux[1]
+    m.yp = aux[2]
+    m.zp = aux[3]
+    m.wd = aux[4]
+    m.xd = aux[5]
+    m.yd = aux[6]
+    m.zd = aux[7]
+    return m
+
+
+def DualQuaternionStampedMsg2dq(msg):
+    return DQ(msg.wp, msg.xp, msg.yp, msg.zp, msg.wd, msg.xd, msg.yd, msg.zd)

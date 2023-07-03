@@ -8,7 +8,7 @@ import numpy as np
 import quaternion
 from dqrobotics import *
 
-from rosi_common.dq_tools import quat2rpy, rpy2quat, trAndOri2dq, dqElementwiseMul, dq2trAndQuatArray, dqExtractTransV3, dq2rpy, quatAssurePosW
+from rosi_common.dq_tools import quat2rpy, rpy2quat, trAndOri2dq, dqElementwiseMul, dq2trAndQuatArray, dqExtractTransV3, dq2rpy, quatAssurePosW, dq2DualQuaternionStampedMsg
 from rosi_common.rosi_tools import correctFlippersJointSignal, compute_J_ori_dagger, compute_J_art_dagger
 from rosi_common.node_status_tools import nodeStatus
 from rosi_model.rosi_description import tr_base_piFlp
@@ -148,6 +148,7 @@ class NodeClass():
 
         srv_setMuFGain = rospy.Service(self.node_name+'/set_mu_flp_gain', SetFloat, self.srvcllbck_setMuFGain)  
         srv_setMuFJntSetPoint = rospy.Service(self.node_name+'/set_mu_flp_set_point', SetFloat, self.srvcllbck_setMuFJntSetPoint )   
+
         srv_setMuGGain = rospy.Service(self.node_name+'/set_mu_grndist_gain', SetFloat, self.srvcllbck_setMuGGain)  
         srv_setMuGVertDistSetPoint = rospy.Service(self.node_name+'/set_mu_grndist_set_point', SetFloat, self.srvcllbck_setMuGVertDistSetPoint)   
 
@@ -278,11 +279,11 @@ class NodeClass():
 
                     #=== Publishing control metrics
                     #current pose
-                    m = self.dq2DualQuaternionStampedMsg(x_a_R_dq, ros_time, self.node_name)
+                    m = dq2DualQuaternionStampedMsg(x_a_R_dq, ros_time, self.node_name)
                     self.pub_dqPoseCurr.publish(m)
 
                     # pose set-point
-                    m = self.dq2DualQuaternionStampedMsg(self.x_sp_dq, ros_time, self.node_name)
+                    m = dq2DualQuaternionStampedMsg(self.x_sp_dq, ros_time, self.node_name)
                     self.pub_dqSetPoint.publish(m)
 
                     # pose error
@@ -293,11 +294,11 @@ class NodeClass():
                         aux = e_o_R_q.components
                         e_a_R_dq = DQ(aux[0], aux[1], aux[2], aux[3], 0, 0, 0, 0)
 
-                    m = self.dq2DualQuaternionStampedMsg(e_a_R_dq, ros_time, self.node_name)
+                    m = dq2DualQuaternionStampedMsg(e_a_R_dq, ros_time, self.node_name)
                     self.pub_dqError.publish(m)
 
                     # controller gain
-                    m = self.dq2DualQuaternionStampedMsg(self.kp_a_dq , ros_time, self.node_name)
+                    m = dq2DualQuaternionStampedMsg(self.kp_a_dq , ros_time, self.node_name)
                     self.pub_gain_dq.publish(m)
 
             # sleeping the node
@@ -481,27 +482,7 @@ class NodeClass():
         return None  # Value not found
 
 
-    @staticmethod
-    def dq2DualQuaternionStampedMsg(dq, ros_time, frame_id):
-        '''Converts a dual-quaternion variable into a ROS DualQuaternionStamped message
-        Input
-            - dq<DQ>: the dual quaternion variable
-        Output
-            - an object <DualQuaternionStamped> as a ROS message.'''
-        aux = dq.vec8()
-        m = DualQuaternionStamped()
-        m.header.stamp = ros_time
-        m.header.frame_id = frame_id
-        m.wp = aux[0]
-        m.xp = aux[1]
-        m.yp = aux[2]
-        m.zp = aux[3]
-        m.wd = aux[4]
-        m.xd = aux[5]
-        m.yd = aux[6]
-        m.zd = aux[7]
-        return m
-
+    
 
 if __name__ == '__main__':
     node_name = 'chassis_control'

@@ -4,6 +4,8 @@ import rospy
 
 import numpy as np
 
+from rosi_common.dq_tools import DualQuaternionStampedMsg2dq
+
 from rosi_common.msg import DualQuaternionStamped
 from geometry_msgs.msg import TransformStamped
 
@@ -164,7 +166,11 @@ class NodeClass():
                 self.setBulkSP(self.sp_tr['p1'], self.sp_ori['p1'], self.sp_muF['p1'], self.sp_muG['p1'])
 
                 # condition for going to another point
-                rospy.sleep(3)
+                while not rospy.is_shutdown():
+                    DualQuaternionStampedMsg2dq(self.ctrl_basePoseError)
+                    node_rate_sleep.sleep()
+
+                #rospy.sleep(3)
 
                 # going to SP2
                 rospy.loginfo('[%s] Going go P2.', self.node_name)
