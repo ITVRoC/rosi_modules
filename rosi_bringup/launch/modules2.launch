@@ -104,6 +104,7 @@
             <param name="autorepeat_rate" value="4" />
             <param name="coalesce_interval" value="0.05" />
             <param name="default_trig_val" value = "True" />
+            <param name="publish_rate" value="30" />
         </node>
     </group>
 
