@@ -40,11 +40,14 @@ class NodeClass():
        
 
         #----------------- CONTROL GAINS ------------------------------
-        # orientation controller gain per DOF
-        kp_rot_v = [2.0, 4.0, 1.0]
+        # orientation controller Proportional gain per DOF
+        kp_rot_v = [1.0, 2.0, 0.0]
+
+        # orientation controller Integrative gain per DOF
+        ki_rot_v = [0.7, 0.7, 0.0] 
 
         # translation control gain per DOF
-        kp_tr_v = [1.0, 1.0, 0.8]
+        kp_tr_v = [0.0, 0.0, 0.0]
 
 
         #------ Mu function for the Flippers lever angle optimization function
@@ -99,13 +102,20 @@ class NodeClass():
         self.last_jointPos = None
         self.last_f_w = None
 
+        # Orientation integrative signal useful variables
+        self.ctrlOriIntrg_eRpyAccu = np.zeros([3,1])
+        self.ctrlOriIntrg_eRpyLast = np.zeros([3,1])
+
 
         ##========= One-time calculations ===================================
         # computing the set-points in orientation quaternion and pose dual quaternion
         self.x_sp_ori_q, self.x_sp_dq  = self.convertSetPoints2DqFormat(x_sp_tr, x_sp_ori_rpy)
 
-        # orientation controller gain in quaternion format
+        # orientation controller Proportional gain in quaternion format
         self.kp_o_q = np.quaternion(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2])
+
+        # orientatoin controller Integrative gain in vector format
+        self.ki_rot_v = np.array(ki_rot_v).reshape(3,1)
 
         # articulation  controller gain in dual quaternion format
         self.kp_a_dq = DQ(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2], 1, kp_tr_v[0], kp_tr_v[1], kp_tr_v[2])  
@@ -172,6 +182,11 @@ class NodeClass():
         # defining the eternal loop rate
         node_rate_sleep = rospy.Rate(self.p_rateSleep)
 
+        # variables for computing dt
+        dt = rospy.Duration(0)
+        time_last = rospy.get_rostime()
+        
+
         rospy.loginfo('[%s] Entering in ethernal loop.', self.node_name)
         while not rospy.is_shutdown():
 
@@ -182,13 +197,22 @@ class NodeClass():
                 if self.msg_grndDist is not None and self.msg_jointState is not None and self.msg_imu is not None:
 
                     #=== Required computations independently of the current control mode
+
+                    # receiving ROS time
+                    ros_time = rospy.get_rostime()
+
+                    # updates dt
+                    dt = ( ros_time - time_last ).to_sec()
+
                     # setting the imu ROS data in the numpy quaternion format
                     q_imu = quatAssurePosW(  np.quaternion(self.msg_imu.orientation.w, self.msg_imu.orientation.x, self.msg_imu.orientation.y, self.msg_imu.orientation.z)  )
 
-                    # defining the chassis orientation state as the IMU reading without the yaw component
+                    # computing the yaw canceler rotation quaternion
                     rpy = quat2rpy(q_imu)
                     q_yawcorr = rpy2quat([0, 0, rpy[2]])
                     q_yawcorr = np.quaternion(q_yawcorr[0], q_yawcorr[1], q_yawcorr[2], q_yawcorr[3])
+
+                    # defining the chassis orientation state as the IMU reading without the yaw component
                     x_o_R_q = q_imu * q_yawcorr
 
                     # defining the articulation pose state
@@ -203,9 +227,17 @@ class NodeClass():
                         # computing the orientation error
                         e_o_R_q = self.x_sp_ori_q.conj() * x_o_R_q
 
-                        # control signal component due to the orientation error
-                        u_o_R_q = np.multiply(self.kp_o_q.conj().components, e_o_R_q.components)
-                        u_o_R_v = np.array([u_o_R_q[1], u_o_R_q[2]]).reshape(2,1)
+                        # the variable to receive the control signal
+                        u_o_R_v = np.zeros([2,1])
+
+                        # proportional control signal component
+                        u_o_R_q_Prop = np.multiply(self.kp_o_q.conj().components, e_o_R_q.components)
+                        u_o_R_v += np.array([u_o_R_q_Prop[1], u_o_R_q_Prop[2]]).reshape(2,1)
+
+                        # integrative control signal component
+                        u_o_R_v += self.OriIntegrCtrlSig_compute(e_o_R_q, self.ki_rot_v, dt)
+
+                        # transforming the control signal from {R} space to {Pi}
                         u_Pi_v =  np.dot(self.J_ori_dagger, u_o_R_v)
 
 
@@ -263,8 +295,6 @@ class NodeClass():
 
 
                     #=== Publishing the ROS message for the controller
-                    # receiving ROS time
-                    ros_time = rospy.get_rostime()
 
                     # updates drive param
                     self.drive_side = rospy.get_param(self.drive_side_param_path)
@@ -301,10 +331,52 @@ class NodeClass():
                     m = dq2DualQuaternionStampedMsg(self.kp_a_dq , ros_time, self.node_name)
                     self.pub_gain_dq.publish(m)
 
+                    # updates time variable
+                    time_last = ros_time
+
+
+                else: # in case of no valid messages has been received
+                    # resets the init time
+                    time_last = rospy.get_rostime()
+
             # sleeping the node
             node_rate_sleep.sleep()
 
+
+    ''' === Support methods callbacks ==='''
+    def OriIntegrCtrlSig_compute(self, e_q, ki, dt):
+        '''Computes the Integrative control signal for the orientation control
+        based on the trapezoidal rule
+        Input:
+            - e_q <np.quaternion>: current error in quaternion format
+            - ki <np.array>[3,1]: integrative control gain per dof
+            - dt <float>: time step
+        Output:
+            <np.array>[2,1] containing the integrative control signal for roll and pitch angles
+        '''
+        
+        # converts the orientationerror quaternion to the rpy format
+        e_rpy = np.array( quat2rpy(e_q) ).reshape(3,1)
+
+        # accumulates by integration the orientation error in rpy format
+        self.ctrlOriIntrg_eRpyAccu += 0.5 * dt * (self.ctrlOriIntrg_eRpyLast + e_rpy) 
+
+        # computes the control signal
+        u = ki * self.ctrlOriIntrg_eRpyAccu 
+
+        # updating the last rpy error variable
+        self.ctrlOriIntrg_eRpyLast = e_rpy
+        
+        # returns the integrative control signal
+        return np.array([u[0], u[1]]).reshape(2,1)
     
+
+
+    def OriIntegrCtrlSig_zerateAcc(self):
+        '''Zerates the integrative signal accumulator variable'''
+        self.ctrlOriIntrg_eRpyAccu = np.zeros([3,1])
+    
+
     ''' === Topics callbacks ==='''
     def cllbck_imu(self, msg):
         '''Callback for the IMU messages.'''
