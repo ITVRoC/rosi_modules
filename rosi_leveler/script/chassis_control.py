@@ -8,7 +8,7 @@ import numpy as np
 import quaternion
 from dqrobotics import *
 
-from rosi_common.dq_tools import quat2rpy, rpy2quat, trAndOri2dq, dqElementwiseMul, dq2trAndQuatArray, dqExtractTransV3, dq2rpy, quatAssurePosW, dq2DualQuaternionStampedMsg
+from rosi_common.dq_tools import quat2rpy, rpy2quat, trAndOri2dq, dqElementwiseMul, dq2trAndQuatArray, dqExtractTransV3, dq2rpy, quatAssurePosW, dq2DualQuaternionStampedMsg, dq2trAndQuatArray
 from rosi_common.rosi_tools import correctFlippersJointSignal, compute_J_ori_dagger, compute_J_art_dagger
 from rosi_common.node_status_tools import nodeStatus
 from rosi_model.rosi_description import tr_base_piFlp
@@ -40,14 +40,21 @@ class NodeClass():
        
 
         #----------------- CONTROL GAINS ------------------------------
-        # orientation controller Proportional gain per DOF
-        kp_rot_v = [1.0, 2.0, 0.0]
 
-        # orientation controller Integrative gain per DOF
-        ki_rot_v = [0.7, 0.7, 0.0] 
+        #--> Proportional
+        # orientation controller Proportional gain per DOF
+        kp_rot_v = [2.0, 2.0, 0.0]
 
         # translation control gain per DOF
         kp_tr_v = [0.0, 0.0, 0.0]
+
+
+        #--> Integrative
+        # orientation controller Integrative gain per DOF
+        ki_rot_v = [0.5, 0.5, 0.0] 
+
+        # translation control gain per DOF
+        ki_tr_v = [0.0, 0.0, 0.0]
 
 
         #------ Mu function for the Flippers lever angle optimization function
@@ -96,15 +103,17 @@ class NodeClass():
         }
 
         # default control type
-        self.ctrlType_curr = self.chassisCtrlType['orientation']
+        self.ctrlType_curr = self.chassisCtrlType['articulation']
 
         # for storing joints and w function last values
         self.last_jointPos = None
         self.last_f_w = None
 
-        # Orientation integrative signal useful variables
+        #  Integrative signal useful variables
         self.ctrlOriIntrg_eRpyAccu = np.zeros([3,1])
         self.ctrlOriIntrg_eRpyLast = np.zeros([3,1])
+        self.ctrlArtIntrg_eTrZAccu = 0.0
+        self.ctrlArtIntrg_eTrZLast = 0.0
 
 
         ##========= One-time calculations ===================================
@@ -114,11 +123,14 @@ class NodeClass():
         # orientation controller Proportional gain in quaternion format
         self.kp_o_q = np.quaternion(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2])
 
-        # orientatoin controller Integrative gain in vector format
+        # articulation  controller Proportional gain in dual quaternion format
+        self.kp_a_dq = DQ(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2], 1, kp_tr_v[0], kp_tr_v[1], kp_tr_v[2])  
+
+        # orientation controller Integrative gain in vector format
         self.ki_rot_v = np.array(ki_rot_v).reshape(3,1)
 
-        # articulation  controller gain in dual quaternion format
-        self.kp_a_dq = DQ(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2], 1, kp_tr_v[0], kp_tr_v[1], kp_tr_v[2])  
+        # articulation controller Integrative gain in vector format
+        self.ki_tr_v = np.array(ki_tr_v).reshape(3,1)
 
         # chassis orientation kinematics considering that propulsion and chassis frames have all the same orientation (identity matrix)
         self.J_ori_dagger = compute_J_ori_dagger(tr_base_piFlp.values())
@@ -245,7 +257,6 @@ class NodeClass():
                         if self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_FlpJnt'] or \
                            self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_GrndHght']:
 
-
                             # computes the mu function for the Flippers lever angle optimization function case
                             if self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_FlpJnt']:
 
@@ -267,25 +278,27 @@ class NodeClass():
                             aux_u = np.dot(self.J_ori_nsproj, mu)
 
                             # summing the component to the current orientation signal
-                            u_Pi_v = u_Pi_v + aux_u
+                            u_Pi_v += aux_u
 
 
                     # If the control mode is articulation
                     elif self.ctrlType_curr == self.chassisCtrlType['articulation']:
 
                         # computing the pose error
-                        e_a_R_dq = self.x_sp_dq .conj() * x_a_R_dq
+                        e_a_R_dq = self.x_sp_dq.conj() * x_a_R_dq
 
-                        # computing articulation the control signal
+                        # variable to receive the control signal in {R} space
+                        u_a_R = np.zeros([3,1])
+
+                        # computing Proportional control signal
                         u_a_R_dq = dqElementwiseMul(self.kp_a_dq.conj(), e_a_R_dq) # kp_dq.conj
-
-                        # converting the control signal to vector (translation) and quaternion (orientation) formats
                         u_a_R_tr, u_a_R_q = dq2trAndQuatArray(u_a_R_dq)
+                        u_a_R += np.array([u_a_R_tr[2][0], u_a_R_q.components[1], u_a_R_q.components[2]]).reshape(3,1)
 
-                        # defining the control signal vector
-                        u_a_R = np.array([u_a_R_tr[2][0], u_a_R_q.components[1], u_a_R_q.components[2]]).reshape(3,1)
+                        # computing the Integrator control signal
+                        u_a_R += self.ArtIntegrCtrlSig_compute(e_a_R_dq, self.ki_rot_v, self.ki_tr_v, dt)
 
-                        # control signal for each propulsion mechanisms vertical axis
+                        # transforming the control signal from {R} space to {Pi}
                         u_Pi_v = np.dot(self.J_art_dagger, u_a_R)
      
 
@@ -358,7 +371,7 @@ class NodeClass():
         # converts the orientationerror quaternion to the rpy format
         e_rpy = np.array( quat2rpy(e_q) ).reshape(3,1)
 
-        # accumulates by integration the orientation error in rpy format
+        # accumulates by trapezoidal integration the orientation error in rpy format
         self.ctrlOriIntrg_eRpyAccu += 0.5 * dt * (self.ctrlOriIntrg_eRpyLast + e_rpy) 
 
         # computes the control signal
@@ -370,6 +383,33 @@ class NodeClass():
         # returns the integrative control signal
         return np.array([u[0], u[1]]).reshape(2,1)
     
+
+    def ArtIntegrCtrlSig_compute(self, e_dq, ki_ori, ki_tr, dt):
+        '''Computes the Integrative control signal for the articulation control'''
+
+        # extract relevant variables from error dq
+        e_tr, e_q = dq2trAndQuatArray(e_dq)
+
+
+        #--- orientation integrative control signal component
+        # computes the orientation Integrative control signal
+        u_o = self.OriIntegrCtrlSig_compute(e_q, ki_ori, dt)
+
+
+        #--- vertical translation control signal component
+        # accumulates by trapezoidal integration the vertical translation error in rpy format
+        self.ctrlArtIntrg_eTrZAccu += 0.5 * dt * (self.ctrlArtIntrg_eTrZLast + e_tr[2])
+
+        # computes the vertical translation control signal
+        u_trZ = ki_tr[2] * self.ctrlArtIntrg_eTrZAccu
+
+        #--- posamble
+        # updating the last translation error component
+        self.ctrlArtIntrg_eTrZLast = e_tr[2]
+
+        # returns the articulation integrative control signal
+        return np.vstack([u_o, u_trZ])
+        
 
 
     def OriIntegrCtrlSig_zerateAcc(self):
@@ -397,6 +437,10 @@ class NodeClass():
     ''' === Service Callbacks === '''
     def srvcllbck_setActive(self, req):
         ''' Method for setting the active node status flag'''
+
+        # zerate integrator accumulator variables
+        self.OriIntegrCtrlSig_zerateAcc()
+
         return self.ns.defActiveServiceReq(req, rospy)
 
 
@@ -453,6 +497,9 @@ class NodeClass():
             self.ctrlType_curr = req.value
             resp.ret = self.ctrlType_curr 
             rospy.loginfo('[%s] Setting control type to: %s.', self.node_name, self.get_key_by_value(self.chassisCtrlType, self.ctrlType_curr))
+
+            # zerating integrator variables
+            self.OriIntegrCtrlSig_zerateAcc()
 
         # in case of the received control mode is unavailable
         else:
