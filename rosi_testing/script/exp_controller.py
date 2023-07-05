@@ -64,13 +64,25 @@ class NodeClass():
         }
 
 
-        ##------- Pose control gains
-        # orientation controller gain per DOF
-        self.kp_rot_v = [2, 0, 0]
+        ##------- Pose control gains ---------------
 
-        # translation control gain per DOF
+        #---> Proportional gains
+        # translation Proportional control gain per DOF
         self.kp_tr_v = [0.0, 0.0, 0.0]
 
+        # orientation Proportional controller gain per DOF
+        self.kp_rot_v = [2, 0, 0]
+
+        
+        #---> Integrator gains
+        # translational Integrator control gain per DOF
+        self.ki_tr_v = [0.0, 0.0, 0.0]
+
+        # orientation Integrator control gain per DOF
+        self.ki_rot_v = [0.0, 0.0, 0.0]
+
+
+        #---> Mu functions gains
         # flipper Mu function gain
         self.muF_kmu = 0.0
 
@@ -79,7 +91,7 @@ class NodeClass():
 
 
 
-        ##------- Home set-points
+        ##------- Home set-points -------------------
         # position home set-point
         self.sp_tr_home = [0.0, 0.0, 0.25]
 
@@ -221,7 +233,7 @@ class NodeClass():
                 self.setCtrlType(self.chassisCtrlType[self.ctrlTypeDes])
 
                 # setting controller gains
-                self.setBulkGains(self.kp_tr_v, self.kp_rot_v, self.muF_kmu, self.muG_kmu)
+                self.setBulkGains(self.kp_tr_v, self.kp_rot_v, self.ki_tr_v, self.ki_rot_v, self.muF_kmu, self.muG_kmu)
 
                 # sending the robot to home position
                 rospy.loginfo('[%s] Going to Home pose.', self.node_name)
@@ -399,7 +411,7 @@ class NodeClass():
         return ret.ret
     
 
-    def setBulkGains(self, ktr, krot, kmuF, kmuG):
+    def setBulkGains(self, kp_tr, kp_rot, ki_tr, ki_rot, kmuF, kmuG):
         '''Sends to the controller node desired gains
         Input:
             - ktr <list>: a 3-sized list containing the translation gain.
@@ -408,8 +420,13 @@ class NodeClass():
             - kmuG <floag>: the ground distance mu function gain    
         '''
         
-        # setting the controller control gain
-        self.srvPrx_setPoseCtrlGain( setPoseCtrlGainRequest(ktr, krot) )
+        # setting the controller control gains
+        aux = setPoseCtrlGainRequest()
+        aux.kp_tr = kp_tr
+        aux.kp_ori = kp_rot
+        aux.ki_tr = ki_tr
+        aux.ki_ori = ki_rot
+        self.srvPrx_setPoseCtrlGain(aux)
 
         # setting the flipper mu function gain
         self.srvPrx_setMuFlp_gain( SetFloatRequest(kmuF) )
