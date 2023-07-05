@@ -469,7 +469,7 @@ class NodeClass():
                 threshold = self.threshold['rot_x']
             elif self.errorMit_dof == 'rot_y':
                 e = rpy[1]
-                threshold = self.threshold['rot_y']
+                threshold = self.threshold['Zrot_y']
 
 
             # if the error is above the threshold, the error time count zerates

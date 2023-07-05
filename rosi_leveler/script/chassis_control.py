@@ -46,15 +46,15 @@ class NodeClass():
         kp_rot_v = [2.0, 2.0, 0.0]
 
         # translation control gain per DOF
-        kp_tr_v = [0.0, 0.0, 0.0]
+        kp_tr_v = [0.0, 0.0, 0.7]
 
 
         #--> Integrative
         # orientation controller Integrative gain per DOF
-        ki_rot_v = [0.5, 0.5, 0.0] 
+        ki_rot_v = [0.2, 0.2, 0.0] 
 
         # translation control gain per DOF
-        ki_tr_v = [0.0, 0.0, 0.0]
+        ki_tr_v = [0.0, 0.0, 0.1]
 
 
         #------ Mu function for the Flippers lever angle optimization function
@@ -298,6 +298,8 @@ class NodeClass():
                         # computing the Integrator control signal
                         u_a_R += self.ArtIntegrCtrlSig_compute(e_a_R_dq, self.ki_rot_v, self.ki_tr_v, dt)
 
+                        print(u_a_R)
+
                         # transforming the control signal from {R} space to {Pi}
                         u_Pi_v = np.dot(self.J_art_dagger, u_a_R)
      
@@ -384,6 +386,7 @@ class NodeClass():
         return np.array([u[0], u[1]]).reshape(2,1)
     
 
+
     def ArtIntegrCtrlSig_compute(self, e_dq, ki_ori, ki_tr, dt):
         '''Computes the Integrative control signal for the articulation control'''
 
@@ -401,20 +404,26 @@ class NodeClass():
         self.ctrlArtIntrg_eTrZAccu += 0.5 * dt * (self.ctrlArtIntrg_eTrZLast + e_tr[2])
 
         # computes the vertical translation control signal
-        u_trZ = ki_tr[2] * self.ctrlArtIntrg_eTrZAccu
+        u_trZ = -1 * ki_tr[2] * self.ctrlArtIntrg_eTrZAccu
 
         #--- posamble
         # updating the last translation error component
         self.ctrlArtIntrg_eTrZLast = e_tr[2]
 
+        # composed control signal
+        u = np.vstack([u_trZ, u_o])
+
+        #print(u)
+
         # returns the articulation integrative control signal
-        return np.vstack([u_o, u_trZ])
+        return u
         
 
 
-    def OriIntegrCtrlSig_zerateAcc(self):
+    def IntegrCtrlSig_zerateAcc(self):
         '''Zerates the integrative signal accumulator variable'''
         self.ctrlOriIntrg_eRpyAccu = np.zeros([3,1])
+        self.ctrlArtIntrg_eTrZAccu = 0.0
     
 
     ''' === Topics callbacks ==='''
@@ -439,7 +448,7 @@ class NodeClass():
         ''' Method for setting the active node status flag'''
 
         # zerate integrator accumulator variables
-        self.OriIntegrCtrlSig_zerateAcc()
+        self.IntegrCtrlSig_zerateAcc()
 
         return self.ns.defActiveServiceReq(req, rospy)
 
@@ -458,12 +467,19 @@ class NodeClass():
         ''' Service callback method for redefining the pose set-point given 
         two 3D vectors (translation [m] + orientation in euler-RPY [rad]'''
         # updating set-point variables
+
+        # zerate integrator accumulator variables
+        self.IntegrCtrlSig_zerateAcc()
+
         self.x_sp_ori_q, self.x_sp_dq  = self.convertSetPoints2DqFormat(list(req.translation), list(req.orientation))
         return True
 
 
     def srvcllbck_setPoseCtrlGain(self, req):
         '''Service that sets the controller gains'''
+
+        # zerate integrator accumulator variables
+        self.IntegrCtrlSig_zerateAcc()
 
         # orientation controller gain in quaternion format
         self.kp_o_q = np.quaternion(1, req.kp_ori[0], req.kp_ori[1], req.kp_ori[2])
@@ -499,7 +515,7 @@ class NodeClass():
             rospy.loginfo('[%s] Setting control type to: %s.', self.node_name, self.get_key_by_value(self.chassisCtrlType, self.ctrlType_curr))
 
             # zerating integrator variables
-            self.OriIntegrCtrlSig_zerateAcc()
+            self.IntegrCtrlSig_zerateAcc()
 
         # in case of the received control mode is unavailable
         else:
@@ -518,12 +534,20 @@ class NodeClass():
     
     def srvcllbck_setMuFGain(self, req):
         ''' Method for setting the flippers mu function gain'''
+
+        # zerate integrator accumulator variables
+        self.IntegrCtrlSig_zerateAcc()
+
         self.muf_kmu_l = 4*[req.value]
         return SetFloatResponse(float(self.muf_kmu_l[0]))
 
 
     def srvcllbck_setMuFJntSetPoint(self, req):
         '''Method for setting the flippers mu function set-point'''
+
+        # zerate integrator accumulator variables
+        self.IntegrCtrlSig_zerateAcc()
+
         self.muf_flpJointPosSp_l = 4 * [req.value]
         return SetFloatResponse(float(self.muf_flpJointPosSp_l[0]))
 
