@@ -17,7 +17,7 @@ from rosi_common.msg import Float32Array, Vector3ArrayStamped, DualQuaternionSta
 from sensor_msgs.msg import Imu, JointState
 from geometry_msgs.msg import Vector3
 
-from rosi_common.srv import SetNodeStatus, GetNodeStatusList, setPoseSetPointVec, setPoseCtrlGain, getPoseCtrlGain, getPoseSetPointVec, SetInt, SetIntResponse, GetInt, GetIntResponse, SetFloat, SetFloatResponse, GetFloat, GetFloatResponse
+from rosi_common.srv import SetNodeStatus, GetNodeStatusList, setPoseSetPointVec, setPoseCtrlGain, getPoseCtrlGain, getPoseSetPointVec, SetInt, SetIntResponse, GetInt, GetIntResponse, SetFloat, SetFloatResponse, GetFloat, GetFloatResponse, getPoseCtrlGainResponse
 
 
 class NodeClass():
@@ -481,11 +481,17 @@ class NodeClass():
         # zerate integrator accumulator variables
         self.IntegrCtrlSig_zerateAcc()
 
-        # orientation controller gain in quaternion format
+        # orientation controller proportional gain in quaternion format
         self.kp_o_q = np.quaternion(1, req.kp_ori[0], req.kp_ori[1], req.kp_ori[2])
 
-        # articulation  controller gain in dual quaternion format
+        # articulation  controller proportional gain in dual quaternion format
         self.kp_a_dq = DQ(1, req.kp_ori[0], req.kp_ori[1], req.kp_ori[2], 1, req.kp_tr[0], req.kp_tr[1], req.kp_tr[2])  
+
+        # translation controller integrator gain
+        self.ki_tr_v = np.array(req.ki_tr).reshape(3,1)
+
+        # orientation controller integrator gain
+        self.ki_rot_v = np.array(req.ki_ori).reshape(3,1)
 
         return True
     
@@ -499,8 +505,17 @@ class NodeClass():
 
     def srvcllbck_getPoseCtrlGain(self, req):
         '''Service that gets controller gains'''
+
+        # extracting proportional gains
         aux = self.kp_a_dq.vec8().tolist()
-        return [aux[1:4], aux[5:]]
+
+        ret = getPoseCtrlGainResponse()
+        ret.kp_tr = aux[5:]
+        ret.kp_ori = aux[1:4]
+        ret.ki_tr = self.ki_tr_v.flatten().tolist()
+        ret.ki_ori = self.ki_rot_v.flatten().tolist()
+
+        return ret
     
 
     def srvcllbck_setCtrlType(self, req):
@@ -631,7 +646,6 @@ if __name__ == '__main__':
     node_name = 'chassis_control'
     rospy.init_node(node_name, anonymous=True)
     rospy.loginfo('node '+node_name+' initiated.')
-    rospy.loginfo('Actually, articulationC_control_1 node initiated!!! Testing purposes only.')
     try:
         node_obj = NodeClass(node_name)
     except rospy.ROSInternalException: pass
