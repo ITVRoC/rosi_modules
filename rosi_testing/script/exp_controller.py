@@ -9,6 +9,9 @@ import rospy
 import numpy as np
 from dqrobotics import *
 import matplotlib.pyplot as plt
+from datetime import datetime, date
+import os
+import csv
 
 
 from rosi_common.dq_tools import DualQuaternionStampedMsg2dq, dq2rpy, dqExtractTransV3, quat2rpy, trAndOri2dq
@@ -34,22 +37,23 @@ class NodeClass():
         self.ctrlTypeDes = "articulation"
 
         # dof to evaluate the error
-        self.errorMit_dof = 'tr_z'  # possible values are 'tr_z', 'rot_x' and 'rot_y'
+        self.errorMit_dof = 'rot_x'  # possible values are 'tr_z', 'rot_x' and 'rot_y'
 
 
         ##------- Experiment Pose set-points
         # The controller will go first to 'p1', then to 'p2', and finally returning to 'p1'
         # position set-point
         self.sp_tr = { # in [m]
-            'p1': [0.0, 0.0, 0.21],
-            'p2': [0.0, 0.0, 0.37]
+            'p1': [0.0, 0.0, 0.0],
+            'p2': [0.0, 0.0, 0.0]
         }
 
          # orientation set-point
         self.sp_ori = { # rpy in [rad]
-            'p1': np.deg2rad([0, 0, 0]),
-            'p2': np.deg2rad([0, 0, 0])
+            'p1': np.deg2rad([-15, 0, 0]),
+            'p2': np.deg2rad([15, 0, 0])
         }
+
 
 
 
@@ -71,18 +75,18 @@ class NodeClass():
 
         #---> Proportional gains
         # translation Proportional control gain per DOF
-        self.kp_tr_v = [0.0, 0.0, 1]
+        self.kp_tr_v = [0.0, 0.0, 0.0]
 
         # orientation Proportional controller gain per DOF
-        self.kp_rot_v = [0.0, 0.0, 0.0]
+        self.kp_rot_v = [2.0, 0.0, 0.0]
 
         
         #---> Integrator gains
         # translational Integrator control gain per DOF
-        self.ki_tr_v = [0.0, 0.0, 0.4]
+        self.ki_tr_v = [0.0, 0.0, 0.0]
 
         # orientation Integrator control gain per DOF
-        self.ki_rot_v = [0.0, 0.0, 0.0] 
+        self.ki_rot_v = [0.5, 0.0, 0.0] 
 
 
         #---> Mu functions gains
@@ -108,7 +112,6 @@ class NodeClass():
         self.sp_muG_home = 0.25 # in [m]
 
 
-
         ##------------- Runtime parameters ---------------------
         # node rate sleep [Hz]
         self.p_rateSleep = 25
@@ -120,10 +123,10 @@ class NodeClass():
         self.slpSrvCll = 0.1
 
         # time window that the error should be below the threshold so we consider that the objective has been atteint
-        self.error_time_window = rospy.Duration.from_sec(1)
+        self.error_time_window = rospy.Duration.from_sec(4)
 
         # max time for waiting the controller to reach the set-point
-        self.error_time_max = rospy.Duration.from_sec(3)
+        self.error_time_max = rospy.Duration.from_sec(30)
         
         # threshold for considering the error as acceptable
         self.threshold = {
@@ -133,7 +136,21 @@ class NodeClass():
         }
 
 
-        #------------------ Plotting parameters -------------------
+        #------------------ Saving/Plotting parameters -------------------
+
+        # flag for saving or not the plottings
+        self.p_flagSavingPic = True
+
+        # path to the folder where results are going to be stored
+        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/data/rotx'
+
+        # ylabel resolution
+        self.p_yLabelRes = 9
+
+        # line width
+        self.p_lw_model = 1.5
+        self.p_lw_vicon = 0.8
+        self.p_lw_sp = 1.2
 
         # Colors for plotting
         self.c1 = '#ff00ff'
@@ -141,9 +158,15 @@ class NodeClass():
         self.c3 = '#7600be'
         self.c4 = '#bbaa00'
         self.c5 = '#009500'
-        self.c_black = '000000'
+        self.c_black = '#000000'
+        self.c_gray = '#828282'
+        self.c_blue = '#274381'
+        self.c_red = '#9e1210'
+        self.c_redLight = '#9c6566'
 
-        ##=== Useful variables
+
+
+        ##==================== Useful variables
 
         self.gt_basePose_msg = None
         self.ctrl_basePose_msg = None
@@ -183,7 +206,7 @@ class NodeClass():
         }
 
         # flag indicating if logging is active
-        self.flag_logging = False
+        self.flag_logging = True
 
         # initial time of each received variable
         self.loggingTimeIni = {
@@ -255,19 +278,18 @@ class NodeClass():
                 self.waitErrorMitigation(node_rate_sleep)
 
                 # going to SP2
-                #rospy.loginfo('[%s] Going go P2.', self.node_name)
-                #self.setBulkSP(self.sp_tr['p2'], self.sp_ori['p2'], self.sp_muF['p2'], self.sp_muG['p2'])
+                rospy.loginfo('[%s] Going go P2.', self.node_name)
+                self.setBulkSP(self.sp_tr['p2'], self.sp_ori['p2'], self.sp_muF['p2'], self.sp_muG['p2'])
 
                 # condition for going to another point
-                #self.waitErrorMitigation(node_rate_sleep)
+                self.waitErrorMitigation(node_rate_sleep)
 
                 # going to back SP1
-                #rospy.loginfo('[%s] Going back to P1.', self.node_name)
-                #self.setBulkSP(self.sp_tr['p1'], self.sp_ori['p1'], self.sp_muF['p1'], self.sp_muG['p1'])
+                rospy.loginfo('[%s] Going back to P1.', self.node_name)
+                self.setBulkSP(self.sp_tr['p1'], self.sp_ori['p1'], self.sp_muF['p1'], self.sp_muG['p1'])
 
                 # condition for going to another point
-                #self.waitErrorMitigation(node_rate_sleep)
-
+                self.waitErrorMitigation(node_rate_sleep)
 
                 # sending the robot to home position
                 rospy.loginfo('[%s] Going to Home pose.', self.node_name)
@@ -279,35 +301,140 @@ class NodeClass():
                 # deactivating logging
                 self.flag_logging = False
 
-
                 rospy.loginfo('[%s] End of the experiment', self.node_name)
 
-                ##--- plotting results
-                fig, axes = plt.subplots(3,1)
 
-                axes[0].set_title('rot x')
-                axes[0].plot(self.log['model_time'], np.rad2deg( self.log['model_rot_x']  ), color=self.c3)
-                axes[0].plot(self.log['vicon_time'], np.rad2deg(  self.log['vicon_rot_x']  ), color=self.c4, linestyle='dashed')
-                axes[0].plot(self.log['sp_time'], np.rad2deg(  self.log['sp_rot_x']  ), color=self.c_black, linestyle='dashed')
 
-                axes[1].set_title('rot y')
-                axes[1].plot(self.log['model_time'], np.rad2deg(  self.log['model_rot_y']  ), color=self.c3)
-                axes[1].plot(self.log['vicon_time'], np.rad2deg(  self.log['vicon_rot_y']  ), color=self.c4, linestyle='dashed')
-                axes[1].plot(self.log['sp_time'], np.rad2deg(  self.log['sp_rot_y']  ), color=self.c_black, linestyle='dashed')
+                ##===============--- plotting results ---===============
+                fig, axes = plt.subplots(3,1, sharex=True)
+
+                #---> rot x
+                axes[0].plot(self.log['model_time'], np.rad2deg( self.log['model_rot_x']  ), color=self.c_blue, label='ctrl', lw=self.p_lw_model)
+                axes[0].plot(self.log['vicon_time'], np.rad2deg(  self.log['vicon_rot_x']  ), color=self.c_redLight, linestyle='dashed', label='vicon', lw=self.p_lw_vicon)
+                axes[0].plot(self.log['sp_time'], np.rad2deg(  self.log['sp_rot_x']  ), color=self.c_black, linestyle='dashed', label='sp', lw=self.p_lw_sp)
+
+                axes[0].set_title(  'rot x  -  kp:'+format(self.kp_rot_v[0], '.1f')+',  ki:'+format(self.ki_rot_v[0])  )
+                axes[0].set_ylabel('angle [deg]', color=self.c_gray)
+
+                y_locator = axes[0].yaxis.get_major_locator()
+                y_locator.set_params(nbins=self.p_yLabelRes)
+
+
+
+                #---> rot y
+                axes[1].plot(self.log['model_time'], np.rad2deg(  self.log['model_rot_y']  ), color=self.c_blue, label='ctrl', lw=self.p_lw_model) # converting log data to degrees
+                axes[1].plot(self.log['vicon_time'], np.rad2deg(  self.log['vicon_rot_y']  ), color=self.c_redLight, linestyle='dashed', label='vicon', lw=self.p_lw_vicon) # converting log data to degrees
+                axes[1].plot(self.log['sp_time'], np.rad2deg(  self.log['sp_rot_y']  ), color=self.c_black, linestyle='dashed', label='sp', lw=self.p_lw_sp)
+
+                axes[1].set_title(  'rot y  -  kp:'+format(self.kp_rot_v[1], '.1f')+',  ki:'+format(self.ki_rot_v[1])  )
+                axes[1].set_ylabel('angle [deg]', color=self.c_gray)
+
+                y_locator = axes[1].yaxis.get_major_locator()
+                y_locator.set_params(nbins=self.p_yLabelRes)
                 
-                axes[2].set_title('tr z')
-                axes[2].plot(self.log['model_time'], self.log['model_tr_z'], color=self.c3)
-                axes[2].plot(self.log['vicon_time'], self.log['vicon_tr_z'], color=self.c4, linestyle='dashed')
-                axes[2].plot(self.log['sp_time'], self.log['sp_tr_z'], color=self.c_black, linestyle='dashed')
 
-                plt.tight_layout()
 
+                #---> tr z
+                axes[2].plot(self.log['model_time'], 100 * np.array( self.log['model_tr_z'] ), color=self.c_blue, label='ctrl', lw=self.p_lw_model) # converting log data to centimeters
+                axes[2].plot(self.log['vicon_time'], 100 * np.array( self.log['vicon_tr_z'] ), color=self.c_redLight, linestyle='dashed', label='vicon', lw=self.p_lw_vicon) # converting log data to centimeters
+                axes[2].plot(self.log['sp_time'], 100 * np.array( self.log['sp_tr_z'] ), color=self.c_black, linestyle='dashed', label='sp', lw=self.p_lw_sp)
+
+                axes[2].set_title(  'tr z  -  kp:'+format(self.kp_tr_v[2], '.1f')+',  ki:'+format(self.ki_tr_v[2])  )
+                axes[2].set_ylabel('distance [cm]', color=self.c_gray)
+                axes[2].set_xlabel('time [s]', color=self.c_gray)
+
+                y_locator = axes[2].yaxis.get_major_locator()
+                y_locator.set_params(nbins=self.p_yLabelRes)
+
+                #---> plotting parameters
+                plt.tight_layout(pad=1.5, w_pad=0.5, h_pad=1.0)
                 for ax in axes.flatten():
                     ax.grid(True, color='gray', linestyle='--', linewidth=0.1)
+
+
+                #---> Saving figures and data
+                if self.p_flagSavingPic:
+
+                    #--> preamble
+                    # obtaining the date string for saving
+                    # save file name
+                    today = date.today()
+                    now = datetime.now()
+                    d = today.strftime("%Y-%m-%d")
+                    n = now.strftime("%H-%M-%S")
+                    dateStr = d + '_' + n
+                    saveDataFolder = self.p_expFolderPath + '/' + dateStr
+
+                    # creates the target directory if it does not exists
+                    if not os.path.exists(saveDataFolder):
+                        os.mkdir(saveDataFolder)
+
+                    rospy.loginfo('[%s] Saving figures and data to %s', self.node_name, saveDataFolder)
+
+                    #--> saving figures
+
+                    # saving in high-res eps format
+                    plt.savefig(saveDataFolder+'/plot.eps', dpi=300, format='eps')
+
+                    # saving in png format
+                    plt.savefig(self.p_expFolderPath+'/'+dateStr+'.png', dpi=300, format='png')
+
+
+                    #--> saving data
+
+                    # header of csv file
+                    csv_header = [s for s in self.log.keys()]
+
+                    # csv data to export
+                    csv_data_model = [[time, x, y, z] for time, x, y, z in zip(  self.log['model_time'], self.log['model_rot_x'], self.log['model_rot_y'] , self.log['model_tr_z']   )]
+                    csv_data_vicon = [[time, x, y, z] for time, x, y, z in zip(  self.log['vicon_time'], self.log['vicon_rot_x'], self.log['vicon_rot_y'] , self.log['vicon_tr_z']   )]
+                    csv_data_sp = [[time, x, y, z] for time, x, y, z in zip(  self.log['sp_time'], self.log['sp_rot_x'], self.log['sp_rot_y'] , self.log['sp_tr_z']   )]
+
+                    # saving model data
+                    with open(saveDataFolder+'/data_model.csv', "w", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(csv_header[0:4])
+                        writer.writerows(csv_data_model)
+
+                    # saving vicon data
+                    with open(saveDataFolder+'/data_vicon.csv', "w", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(csv_header[4:8])
+                        writer.writerows(csv_data_vicon)
+
+                    # saving sp data
+                    with open(saveDataFolder+'/data_sp.csv', "w", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(csv_header[8:])
+                        writer.writerows(csv_data_sp)
+
                 plt.show()
                 
                 break
          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         # sleeps the node
         node_rate_sleep.sleep()
 
@@ -341,7 +468,7 @@ class NodeClass():
             self.log['vicon_time'].append(  (msg.header.stamp - self.loggingTimeIni['vicon']).to_sec()  )
             self.log['vicon_rot_x'].append(rpy[0])
             self.log['vicon_rot_y'].append(rpy[1])
-            self.log['vicon_tr_z'].append(tr[2])
+            self.log['vicon_tr_z'].append(tr[2][0])
 
 
 
@@ -368,7 +495,7 @@ class NodeClass():
             self.log['model_time'].append(  (msg.header.stamp - self.loggingTimeIni['model']).to_sec()  )
             self.log['model_rot_x'].append(rpy[0])
             self.log['model_rot_y'].append(rpy[1])
-            self.log['model_tr_z'].append(tr[2])
+            self.log['model_tr_z'].append(tr[2][0])
 
 
     
@@ -395,7 +522,7 @@ class NodeClass():
             self.log['sp_time'].append(  (msg.header.stamp - self.loggingTimeIni['sp']).to_sec()  )
             self.log['sp_rot_x'].append(rpy[0])
             self.log['sp_rot_y'].append(rpy[1])
-            self.log['sp_tr_z'].append(tr[2])
+            self.log['sp_tr_z'].append(tr[2][0])
 
 
     
