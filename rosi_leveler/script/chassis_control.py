@@ -12,6 +12,7 @@ from rosi_common.dq_tools import quat2rpy, rpy2quat, trAndOri2dq, dqElementwiseM
 from rosi_common.rosi_tools import correctFlippersJointSignal, compute_J_ori_dagger, compute_J_art_dagger
 from rosi_common.node_status_tools import nodeStatus
 from rosi_model.rosi_description import tr_base_piFlp
+from rosi_common.math_tools import quatExp
 
 from rosi_common.msg import Float32Array, Vector3ArrayStamped, DualQuaternionStamped
 from sensor_msgs.msg import Imu, JointState
@@ -42,19 +43,21 @@ class NodeClass():
         #----------------- CONTROL GAINS ------------------------------
 
         #--> Proportional
-        # orientation controller Proportional gain per DOF
-        kp_rot_v = [2.0, 2.0, 0.0]
-
         # translation control gain per DOF
-        kp_tr_v = [0.0, 0.0, 0.7]
+        kp_tr_v = [0.0, 0.0, 1.0]
+
+        # orientation controller Proportional gain per DOF
+        kp_rot_v = [3, 3, 0.0]
 
 
         #--> Integrative
-        # orientation controller Integrative gain per DOF
-        ki_rot_v = [0.2, 0.2, 0.0] 
-
         # translation control gain per DOF
-        ki_tr_v = [0.0, 0.0, 0.1]
+        ki_tr_v = [0.0, 0.0, 0.25]
+
+        # orientation controller Integrative gain per DOF
+        ki_rot_v = [0.5, 0.5, 0.0] 
+
+        
 
 
         #------ Mu function for the Flippers lever angle optimization function
@@ -71,6 +74,11 @@ class NodeClass():
 
         # ground distance set-point
         self.mug_grndDstncSp_l = 0.25
+
+
+        #------ Error integration parameters
+        # orientation error integration method
+        self.intgrMthd = 'quaternion' # possible values are 'rpy' and 'quaternion'
 
 
         #---- Clipping 
@@ -114,6 +122,9 @@ class NodeClass():
         self.ctrlOriIntrg_eRpyLast = np.zeros([3,1])
         self.ctrlArtIntrg_eTrZAccu = 0.0
         self.ctrlArtIntrg_eTrZLast = 0.0
+
+        # testing
+        self.q_e_acc = np.quaternion(*[1,0,0,0])
 
 
         ##========= One-time calculations ===================================
@@ -247,7 +258,7 @@ class NodeClass():
                         u_o_R_v += np.array([u_o_R_q_Prop[1], u_o_R_q_Prop[2]]).reshape(2,1)
 
                         # integrative control signal component
-                        u_o_R_v += self.OriIntegrCtrlSig_compute(e_o_R_q, self.ki_rot_v, dt)
+                        u_o_R_v += self.OriIntegrCtrlSig_compute(e_o_R_q, self.ki_rot_v, dt, self.intgrMthd)
 
                         # transforming the control signal from {R} space to {Pi}
                         u_Pi_v =  np.dot(self.J_ori_dagger, u_o_R_v)
@@ -296,9 +307,9 @@ class NodeClass():
                         u_a_R += np.array([u_a_R_tr[2][0], u_a_R_q.components[1], u_a_R_q.components[2]]).reshape(3,1)
 
                         # computing the Integrator control signal
-                        u_a_R += self.ArtIntegrCtrlSig_compute(e_a_R_dq, self.ki_rot_v, self.ki_tr_v, dt)
+                        u_a_R += self.ArtIntegrCtrlSig_compute(e_a_R_dq, self.ki_rot_v, self.ki_tr_v, dt, self.intgrMthd)
 
-                        print(u_a_R)
+                        #print(u_a_R)
 
                         # transforming the control signal from {R} space to {Pi}
                         u_Pi_v = np.dot(self.J_art_dagger, u_a_R)
@@ -359,7 +370,7 @@ class NodeClass():
 
 
     ''' === Support methods callbacks ==='''
-    def OriIntegrCtrlSig_compute(self, e_q, ki, dt):
+    def OriIntegrCtrlSig_compute(self, e_q, ki, dt, intgrMthd):
         '''Computes the Integrative control signal for the orientation control
         based on the trapezoidal rule
         Input:
@@ -370,24 +381,57 @@ class NodeClass():
             <np.array>[2,1] containing the integrative control signal for roll and pitch angles
         '''
         
-        # converts the orientationerror quaternion to the rpy format
-        e_rpy = np.array( quat2rpy(e_q) ).reshape(3,1)
+        if intgrMthd == 'rpy':  # if the orientation integrator method is rpy
+            # integrates the orientation error in roll-pitch-yaw format by the trapezoidal method
 
-        # accumulates by trapezoidal integration the orientation error in rpy format
-        self.ctrlOriIntrg_eRpyAccu += 0.5 * dt * (self.ctrlOriIntrg_eRpyLast + e_rpy) 
+            # converts the orientation error quaternion to the rpy format
+            e_rpy = np.array( quat2rpy(e_q) ).reshape(3,1)
 
-        # computes the control signal
-        u = ki * self.ctrlOriIntrg_eRpyAccu 
+            # accumulates by trapezoidal integration the orientation error in rpy format
+            self.ctrlOriIntrg_eRpyAccu += 0.5 * dt * (self.ctrlOriIntrg_eRpyLast + e_rpy) 
 
-        # updating the last rpy error variable
-        self.ctrlOriIntrg_eRpyLast = e_rpy
-        
-        # returns the integrative control signal
-        return np.array([u[0], u[1]]).reshape(2,1)
+            # computes the control signal
+            u = ki * self.ctrlOriIntrg_eRpyAccu 
+
+            # updating the last rpy error variable
+            self.ctrlOriIntrg_eRpyLast = e_rpy
+
+
+        elif intgrMthd == 'quaternion': # if the orientation integrator method is quaternion
+            # integrates the orientation error using the quaternion format and the Runge-Kutta method integrator method.
+
+            # creating the omega quaternion considering that each error quaternion orthogonal component is an angular corrective signal for {R}
+            q_omega = np.quaternion( *np.hstack([0, e_q.components[1:]]) ) 
+
+            # computes the average q_omega
+            k1 = q_omega * dt
+            k2 = (q_omega + 0.5*k1) * dt
+            k3 = (q_omega + 0.5*k2) * dt
+            k4 = (q_omega + k3) * dt
+            k_avg = (k1 + 2*k2 + 2*k3 + k4) / 6
+
+            # integrates the current orientation error by accumulation 
+            self.q_e_acc = self.q_e_acc * quatExp(0.5 * k_avg)
+
+            # treates the obtained signal
+            self.q_e_acc = (quatAssurePosW(self.q_e_acc)).normalized()
+
+            # computes the integrator control signal component
+            u = -ki * self.q_e_acc.components[1:4].reshape(3,1)
+
+
+        else: # if the input integrator method has not been recognized
+            rospy.logerr('[%s] requested orientation integration method not recognized')
+            return -1
+
+
+        # isolating control signal components related to rotations around x and y axes of {R}
+        u = np.array([u[0], u[1]]).reshape(2,1)
+
+        return u 
     
 
-
-    def ArtIntegrCtrlSig_compute(self, e_dq, ki_ori, ki_tr, dt):
+    def ArtIntegrCtrlSig_compute(self, e_dq, ki_ori, ki_tr, dt, intgrMthd):
         '''Computes the Integrative control signal for the articulation control'''
 
         # extract relevant variables from error dq
@@ -396,7 +440,7 @@ class NodeClass():
 
         #--- orientation integrative control signal component
         # computes the orientation Integrative control signal
-        u_o = self.OriIntegrCtrlSig_compute(e_q, ki_ori, dt)
+        u_o = self.OriIntegrCtrlSig_compute(e_q, ki_ori, dt, intgrMthd)
 
 
         #--- vertical translation control signal component
@@ -412,8 +456,6 @@ class NodeClass():
 
         # composed control signal
         u = np.vstack([u_trZ, u_o])
-
-        #print(u)
 
         # returns the articulation integrative control signal
         return u

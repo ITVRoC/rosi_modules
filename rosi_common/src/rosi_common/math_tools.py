@@ -34,3 +34,25 @@ def thFromRotmAndTr(rotm, tr):
 
     """
     return np.vstack((np.hstack((rotm, tr)), np.array([0, 0, 0, 1])))
+
+
+def quatExp(q_in):
+    '''Exponentiates the input quaternion
+    Input
+        - q_in <np.quaternion>: the input quaternion
+    Output
+        - a <np.quaternion> containg the exponentiated quaternion
+    '''
+    
+    w = q_in.components[0]
+    v = q_in.components[1:]
+    
+    norm_v = np.linalg.norm(v)
+    exp_w = np.exp(w)
+    
+    exp_w = exp_w * np.cos(norm_v)
+    exp_v = exp_w * ((v / norm_v) * np.sin(norm_v))
+
+    exp_q = np.quaternion( *np.hstack([exp_w, exp_v]) )
+
+    return exp_q
