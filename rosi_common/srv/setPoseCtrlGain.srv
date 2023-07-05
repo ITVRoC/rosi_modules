@@ -1,5 +1,7 @@
 # sets the pose controller kp gains of each translational and rotation chassis dof
 float32[3] kp_tr
 float32[3] kp_ori
+float32[3] ki_tr
+float32[3] ki_ori
 ---
 bool return_status

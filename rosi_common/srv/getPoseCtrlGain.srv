@@ -2,3 +2,5 @@
 ---
 float32[3] kp_tr
 float32[3] kp_ori
+float32[3] ki_tr
+float32[3] ki_ori
