@@ -138,7 +138,7 @@ class NodeClass():
         self.kp_a_v = np.array( [kp_tr_v[2], kp_rot_v[0], kp_rot_v[1]]  ).reshape(3,1)
 
         # orientation controller Proportional gain in quaternion format
-        self.kp_o_q = np.quaternion(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2])
+        #self.kp_o_q = np.quaternion(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2])
 
         # articulation  controller Proportional gain in dual quaternion format
         self.kp_a_dq = DQ(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2], 1, kp_tr_v[0], kp_tr_v[1], kp_tr_v[2])  
@@ -263,17 +263,8 @@ class NodeClass():
                         # the variable to receive the control signal
                         u_o_R_v = np.zeros([2,1])
 
-                        # proportional control signal component
-                        #u_o_R_q_Prop = np.multiply(self.kp_o_q.conj().components, e_o_R_q.components)
-                        #u_o_R_v += np.array([u_o_R_q_Prop[1], u_o_R_q_Prop[2]]).reshape(2,1)
-
-                        ## ---------- TEST ZONE
-
                         # computing the proportional control signal
                         u_o_R_v += self.kp_o_v * e_o_v
-                        
-
-                        ### --------- END OF TEST ZONE
 
                         # computing the integrative control signal component
                         u_o_R_v += self.OriIntegrCtrlSig_compute(e_o_R_q, self.ki_rot_v, dt, self.intgrMthd)
@@ -327,16 +318,8 @@ class NodeClass():
                         # computing the Proportional control signal
                         u_a_R  += np.array([-1,1,1]).reshape(3,1) * self.kp_a_v * e_v
 
-                        #print(u_a_R.flatten())
-
-                        #u_a_R_dq = dqElementwiseMul(self.kp_a_dq.conj(), e_a_R_dq) # kp_dq.conj
-                        #u_a_R_tr, u_a_R_q = dq2trAndQuatArray(u_a_R_dq)
-                        #u_a_R += np.array([u_a_R_tr[2][0], u_a_R_q.components[1], u_a_R_q.components[2]]).reshape(3,1)
-
                         # computing the Integrator control signal
                         u_a_R += self.ArtIntegrCtrlSig_compute(e_a_R_dq, self.ki_rot_v, self.ki_tr_v, dt, self.intgrMthd)
-
-                        #print(u_a_R)
 
                         # transforming the control signal from {R} space to {Pi}
                         u_Pi_v = np.dot(self.J_art_dagger, u_a_R)
@@ -550,8 +533,14 @@ class NodeClass():
         # zerate integrator accumulator variables
         self.IntegrCtrlSig_zerateAcc()
 
+        # orientation controller proportional gain
+        self.kp_o_v = np.array( [req.kp_ori[0], req.kp_ori[1] ] ).reshape(2,1)
+
+        # articulation controller proportional gain
+        self.kp_a_v = np.array( [req.kp_tr[2], req.kp_ori[0], req.kp_ori[1]] ).reshape(3,1)
+
         # orientation controller proportional gain in quaternion format
-        self.kp_o_q = np.quaternion(1, req.kp_ori[0], req.kp_ori[1], req.kp_ori[2])
+        #self.kp_o_q = np.quaternion(1, req.kp_ori[0], req.kp_ori[1], req.kp_ori[2])
 
         # articulation  controller proportional gain in dual quaternion format
         self.kp_a_dq = DQ(1, req.kp_ori[0], req.kp_ori[1], req.kp_ori[2], 1, req.kp_tr[0], req.kp_tr[1], req.kp_tr[2])  

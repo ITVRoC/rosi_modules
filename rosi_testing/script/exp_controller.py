@@ -33,7 +33,7 @@ class NodeClass():
         ##-------------- Controller parameters -------------------------
 
         # desired control type
-        self.ctrlTypeDes = "orientationNullSpace_FlpJnt" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
+        self.ctrlTypeDes = "articulation" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
 
         # experiment type
         self.p_ExperimentType = 'step' # possible values are: 'step', 'circle'
@@ -69,8 +69,8 @@ class NodeClass():
 
          # orientation set-point
         self.sp_ori = { # rpy in [rad]
-            'p1': np.deg2rad([-10, 0, 0]),
-            'p2': np.deg2rad([10, 0, 0])
+            'p1': np.deg2rad([-15, 0, 0]),
+            'p2': np.deg2rad([15, 0, 0])
         }
 
         # flipper joints mu function set-point
@@ -82,7 +82,7 @@ class NodeClass():
         # ground distance mu function set-point
         self.sp_muG = {
             'p1': 0.2,
-            'p2': 0.4
+            'p2': 0.2
         }
 
 
@@ -99,10 +99,10 @@ class NodeClass():
 
         # ---> rotation gains
         # orientation Proportional controller gain per DOF
-        self.kp_rot_v = [2.65, 2.75, 0.0]
+        self.kp_rot_v = [0.01, 0.0, 0.0]
 
         # orientation Integrator control gain per DOF
-        self.ki_rot_v = [0.01, 0.02, 0.0]       
+        self.ki_rot_v = [0.00, 0.00, 0.0]       
 
         
         #---> Mu functions gains
@@ -110,7 +110,7 @@ class NodeClass():
         self.muF_kmu = 0.0
 
         # ground distance Mu function gain
-        self.muG_kmu = 0.8
+        self.muG_kmu = 0.0
 
 
 
@@ -135,7 +135,7 @@ class NodeClass():
         self.p_flagSavingPic = False
 
         # path to the folder where results are going to be stored
-        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/data/test'
+        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/data/oriError_rpy/rot_x'
 
         # axes labels resolution
         self.p_yLabelRes = 12
