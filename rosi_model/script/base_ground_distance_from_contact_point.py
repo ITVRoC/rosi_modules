@@ -32,7 +32,7 @@ class NodeClass():
         self.chosen_dist = 'max' # 'max' publishes the greater distance to the floor found. 'min' publishes the minor
 
         # node rate sleep
-        self.p_rateSleep = 10
+        self.p_rateSleep = 30
 
         ##=== Useful variables
         # node status object

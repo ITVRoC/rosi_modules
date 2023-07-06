@@ -417,7 +417,7 @@ class NodeClass():
             self.q_e_acc = (quatAssurePosW(self.q_e_acc)).normalized()
 
             # computes the integrator control signal component
-            u = -ki * self.q_e_acc.components[1:4].reshape(3,1)
+            u = -1* ki * self.q_e_acc.components[1:4].reshape(3,1)
 
 
         else: # if the input integrator method has not been recognized

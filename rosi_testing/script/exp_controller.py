@@ -34,25 +34,26 @@ class NodeClass():
         ##-------------- Controller parameters -------------------------
 
         # desired control type
-        self.ctrlTypeDes = "articulation"
+        self.ctrlTypeDes = "orientationNullSpace_FlpJnt" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
 
         # dof to evaluate the error
-        self.errorMit_dof = 'rot_x'  # possible values are 'tr_z', 'rot_x' and 'rot_y'
+        self.errorMit_dof = 'rot_x'  # possible values are: 'tr_z', 'rot_x', 'rot_y'
 
 
         ##------- Experiment Pose set-points
         # The controller will go first to 'p1', then to 'p2', and finally returning to 'p1'
         # position set-point
         self.sp_tr = { # in [m]
-            'p1': [0.0, 0.0, 0.0],
-            'p2': [0.0, 0.0, 0.0]
+            'p1': [0.0, 0.0, 0.3],
+            'p2': [0.0, 0.0, 0.3]
         }
 
          # orientation set-point
         self.sp_ori = { # rpy in [rad]
-            'p1': np.deg2rad([-15, 0, 0]),
-            'p2': np.deg2rad([15, 0, 0])
+            'p1': np.deg2rad([0, 0, 0]),
+            'p2': np.deg2rad([0, 0, 0])
         }
+
 
 
 
@@ -60,14 +61,14 @@ class NodeClass():
 
         # flipper joints mu function set-point
         self.sp_muF = {
-            'p1': np.deg2rad(110),
-            'p2': np.deg2rad(110)
+            'p1': np.deg2rad(80),
+            'p2': np.deg2rad(140)
         }
 
         # ground distance mu function set-point
         self.sp_muG = {
-            'p1': 0.25,
-            'p2': 0.25
+            'p1': 0.3,
+            'p2': 0.3
         }
 
 
@@ -78,7 +79,7 @@ class NodeClass():
         self.kp_tr_v = [0.0, 0.0, 0.0]
 
         # orientation Proportional controller gain per DOF
-        self.kp_rot_v = [2.0, 0.0, 0.0]
+        self.kp_rot_v = [2.65, 2.75, 0.0]
 
         
         #---> Integrator gains
@@ -86,7 +87,12 @@ class NodeClass():
         self.ki_tr_v = [0.0, 0.0, 0.0]
 
         # orientation Integrator control gain per DOF
-        self.ki_rot_v = [0.5, 0.0, 0.0] 
+        self.ki_rot_v = [0.01, 0.02, 0.0] 
+
+
+
+
+
 
 
         #---> Mu functions gains
@@ -100,7 +106,7 @@ class NodeClass():
 
         ##------- Home set-points -------------------
         # position home set-point
-        self.sp_tr_home = [0.0, 0.0, 0.29]
+        self.sp_tr_home = [0.0, 0.0, 0.3]
 
         # orientation set-point
         self.sp_ori_home = np.deg2rad([0, 0, 0])
@@ -118,19 +124,10 @@ class NodeClass():
 
         # chassis control service prefix
         cc_pr = '/chassis_control'
-
-        # defaul sleep time after service calls
-        self.slpSrvCll = 0.1
-
-        # time window that the error should be below the threshold so we consider that the objective has been atteint
-        self.error_time_window = rospy.Duration.from_sec(4)
-
-        # max time for waiting the controller to reach the set-point
-        self.error_time_max = rospy.Duration.from_sec(30)
         
         # threshold for considering the error as acceptable
         self.threshold = {
-            'tr_z': 0.001,
+            'tr_z': 0.01,
             'rot_x': np.deg2rad(1),
             'rot_y': np.deg2rad(1) 
         }
@@ -142,14 +139,15 @@ class NodeClass():
         self.p_flagSavingPic = True
 
         # path to the folder where results are going to be stored
-        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/data/rotx'
+        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/data/rot_x'
 
-        # ylabel resolution
-        self.p_yLabelRes = 9
+        # axes labels resolution
+        self.p_yLabelRes = 12
+        self.p_xLabelRes = 20
 
         # line width
         self.p_lw_model = 1.5
-        self.p_lw_vicon = 0.8
+        self.p_lw_vicon = 1.0
         self.p_lw_sp = 1.2
 
         # Colors for plotting
@@ -163,7 +161,6 @@ class NodeClass():
         self.c_blue = '#274381'
         self.c_red = '#9e1210'
         self.c_redLight = '#9c6566'
-
 
 
         ##==================== Useful variables
@@ -269,34 +266,34 @@ class NodeClass():
                 self.flag_logging = True
 
                 # condition for going to another point
-                self.waitErrorMitigation(node_rate_sleep)
+                self.waitErrorMitigation(node_rate_sleep, 5, 5)
 
                 # going to SP1
                 rospy.loginfo('[%s] Going to P1.', self.node_name)
                 self.setBulkSP(self.sp_tr['p1'], self.sp_ori['p1'], self.sp_muF['p1'], self.sp_muG['p1'])
 
-                self.waitErrorMitigation(node_rate_sleep)
+                self.waitErrorMitigation(node_rate_sleep, 5, 20)
 
                 # going to SP2
                 rospy.loginfo('[%s] Going go P2.', self.node_name)
                 self.setBulkSP(self.sp_tr['p2'], self.sp_ori['p2'], self.sp_muF['p2'], self.sp_muG['p2'])
 
                 # condition for going to another point
-                self.waitErrorMitigation(node_rate_sleep)
+                self.waitErrorMitigation(node_rate_sleep, 5, 20)
 
                 # going to back SP1
                 rospy.loginfo('[%s] Going back to P1.', self.node_name)
                 self.setBulkSP(self.sp_tr['p1'], self.sp_ori['p1'], self.sp_muF['p1'], self.sp_muG['p1'])
 
                 # condition for going to another point
-                self.waitErrorMitigation(node_rate_sleep)
+                self.waitErrorMitigation(node_rate_sleep, 5, 20)
 
                 # sending the robot to home position
                 rospy.loginfo('[%s] Going to Home pose.', self.node_name)
                 self.setBulkSP(self.sp_tr_home, self.sp_ori_home, self.sp_muF_home, self.sp_muG_home) 
 
                 # condition for going to another point
-                self.waitErrorMitigation(node_rate_sleep)
+                self.waitErrorMitigation(node_rate_sleep, 5, 20)
 
                 # deactivating logging
                 self.flag_logging = False
@@ -313,7 +310,7 @@ class NodeClass():
                 axes[0].plot(self.log['vicon_time'], np.rad2deg(  self.log['vicon_rot_x']  ), color=self.c_redLight, linestyle='dashed', label='vicon', lw=self.p_lw_vicon)
                 axes[0].plot(self.log['sp_time'], np.rad2deg(  self.log['sp_rot_x']  ), color=self.c_black, linestyle='dashed', label='sp', lw=self.p_lw_sp)
 
-                axes[0].set_title(  'rot x  -  kp:'+format(self.kp_rot_v[0], '.1f')+',  ki:'+format(self.ki_rot_v[0])  )
+                axes[0].set_title(  'rot x  -  kp:'+format(self.kp_rot_v[0], '.2f')+',  ki:'+format(self.ki_rot_v[0], '.2f')  )
                 axes[0].set_ylabel('angle [deg]', color=self.c_gray)
 
                 y_locator = axes[0].yaxis.get_major_locator()
@@ -326,7 +323,7 @@ class NodeClass():
                 axes[1].plot(self.log['vicon_time'], np.rad2deg(  self.log['vicon_rot_y']  ), color=self.c_redLight, linestyle='dashed', label='vicon', lw=self.p_lw_vicon) # converting log data to degrees
                 axes[1].plot(self.log['sp_time'], np.rad2deg(  self.log['sp_rot_y']  ), color=self.c_black, linestyle='dashed', label='sp', lw=self.p_lw_sp)
 
-                axes[1].set_title(  'rot y  -  kp:'+format(self.kp_rot_v[1], '.1f')+',  ki:'+format(self.ki_rot_v[1])  )
+                axes[1].set_title(  'rot y  -  kp:'+format(self.kp_rot_v[1], '.2f')+',  ki:'+format(self.ki_rot_v[1], '.2f')  )
                 axes[1].set_ylabel('angle [deg]', color=self.c_gray)
 
                 y_locator = axes[1].yaxis.get_major_locator()
@@ -339,12 +336,25 @@ class NodeClass():
                 axes[2].plot(self.log['vicon_time'], 100 * np.array( self.log['vicon_tr_z'] ), color=self.c_redLight, linestyle='dashed', label='vicon', lw=self.p_lw_vicon) # converting log data to centimeters
                 axes[2].plot(self.log['sp_time'], 100 * np.array( self.log['sp_tr_z'] ), color=self.c_black, linestyle='dashed', label='sp', lw=self.p_lw_sp)
 
-                axes[2].set_title(  'tr z  -  kp:'+format(self.kp_tr_v[2], '.1f')+',  ki:'+format(self.ki_tr_v[2])  )
+                axes[2].set_title(  'tr z  -  kp:'+format(self.kp_tr_v[2], '.2f')+',  ki:'+format(self.ki_tr_v[2], '.2f')  )
                 axes[2].set_ylabel('distance [cm]', color=self.c_gray)
                 axes[2].set_xlabel('time [s]', color=self.c_gray)
 
                 y_locator = axes[2].yaxis.get_major_locator()
                 y_locator.set_params(nbins=self.p_yLabelRes)
+
+
+
+                x_locator = axes[0].xaxis.get_major_locator()
+                x_locator.set_params(nbins=self.p_xLabelRes)
+
+                x_locator = axes[1].xaxis.get_major_locator()
+                x_locator.set_params(nbins=self.p_xLabelRes)
+
+                x_locator = axes[2].xaxis.get_major_locator()
+                x_locator.set_params(nbins=self.p_xLabelRes)
+
+                
 
                 #---> plotting parameters
                 plt.tight_layout(pad=1.5, w_pad=0.5, h_pad=1.0)
@@ -411,29 +421,6 @@ class NodeClass():
                 plt.show()
                 
                 break
-         
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         # sleeps the node
         node_rate_sleep.sleep()
@@ -587,8 +574,12 @@ class NodeClass():
         self.srvPrx_setMuGrndDst_dstSp(muGsp)
 
 
-    def waitErrorMitigation(self, node_rate_sleep):
+    def waitErrorMitigation(self, node_rate_sleep, timeWithinError, timeMax):
         '''Forces the code to wait until the error is within an acceptable range'''
+
+        # converting times
+        timeWithinError = rospy.Duration().from_sec(timeWithinError)
+        timeMax = rospy.Duration(timeMax)
 
         # ini time of waiting
         time_ini = self.ctrl_basePoseError.header.stamp
@@ -602,7 +593,7 @@ class NodeClass():
             time_curr = self.ctrl_basePoseError.header.stamp
 
             # evaluating if the max time of waiting has been achieved
-            if time_curr - time_ini > self.error_time_max:
+            if time_curr - time_ini > timeMax:
                 break
 
             # extracting error components
@@ -614,17 +605,19 @@ class NodeClass():
             if self.errorMit_dof == 'tr_z':
                 e = tr[2]
                 threshold = self.threshold['tr_z']
+                rospy.loginfo("error curr: %.3f cm,  error thr: %.3f cm", 100 * np.abs(e), 100 * threshold )
+
             elif self.errorMit_dof == 'rot_x':
                 e = rpy[0]
                 threshold = self.threshold['rot_x']
+                rospy.loginfo("[%s] error curr: %.2f deg,  error thr: %.2f deg", self.node_name, np.rad2deg( np.abs(e) ), np.rad2deg( threshold ) )
+
             elif self.errorMit_dof == 'rot_y':
                 e = rpy[1]
                 threshold = self.threshold['rot_y']
-
+                rospy.loginfo("[%s] error curr: %.2f deg,  error thr: %.2f deg", self.node_name, np.rad2deg( np.abs(e) ), np.rad2deg( threshold ) )
             
-            rospy.loginfo("error curr: %.5f,  error thr: %.5f", np.abs(e), threshold )
-
-
+            
             # if the error is above the threshold, the error time count zerates
             if np.abs(e) > threshold:
                 time_windowIni = time_curr
@@ -634,8 +627,8 @@ class NodeClass():
 
                 rospy.loginfo('->>')
                 # verifies if the error is below a threshold for long enough
-                if time_curr - time_windowIni > self.error_time_window:
-                    #rospy.loginfo('[%s] error objective achieved.', self.node_name)
+                if time_curr - time_windowIni > timeWithinError:
+                    rospy.loginfo('[%s] error objective achieved.', self.node_name)
                     break
 
             # sleeps the node

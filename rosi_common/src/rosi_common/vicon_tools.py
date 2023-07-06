@@ -8,7 +8,7 @@ p_marker_offset_tr = [-0.14999997615814, 0.0, 0.18100000917912]
 p_marker_offset_q = [0.70153158903122, 0.0, 0.0, -0.71263885498047]
 
 # Offset between rosi model vertical position and the vicon area
-p_vertOffsetModelAndVicon = 0.0342
+p_vertOffsetModelAndVicon = 0.0342 + 0.01
 
 # applyint the vertical offset directly to the marker
 p_marker_offset_tr[2] += p_vertOffsetModelAndVicon
