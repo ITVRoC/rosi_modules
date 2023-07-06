@@ -47,22 +47,22 @@ class NodeClass():
         kp_tr_v = [0.0, 0.0, 1.0]
 
         # orientation controller Proportional gain per DOF
-        kp_rot_v = [3, 3, 0.0]
+        kp_rot_v = [2.65, 2.75, 0.0]
 
 
         #--> Integrative
         # translation control gain per DOF
-        ki_tr_v = [0.0, 0.0, 0.25]
+        ki_tr_v = [0.0, 0.0, 0.0]
 
         # orientation controller Integrative gain per DOF
-        ki_rot_v = [0.5, 0.5, 0.0] 
+        ki_rot_v = [0.01, 0.02, 0.0] 
 
         
 
 
         #------ Mu function for the Flippers lever angle optimization function
         # propulsion joints angular set-point for the null-space
-        self.muf_flpJointPosSp_l = 4*[np.deg2rad(110)]
+        self.muf_flpJointPosSp_l = 4*[np.deg2rad(120)]
 
         # mu function gain
         self.muf_kmu_l = 4*[0.3]
@@ -70,10 +70,10 @@ class NodeClass():
 
         #------ Mu function for the Chassis ground height optimization function
         # mu function gain 
-        self.mug_kmu_l = 1
+        self.mug_kmu_l = 0.25
 
         # ground distance set-point
-        self.mug_grndDstncSp_l = 0.25
+        self.mug_grndDstncSp_l = 0.85
 
 
         #------ Error integration parameters
