@@ -34,7 +34,7 @@ class NodeClass():
         ##-------------- Controller parameters -------------------------
 
         # desired control type
-        self.ctrlTypeDes = "orientationNullSpace_FlpJnt" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
+        self.ctrlTypeDes = "orientationNullSpace_GrndHght" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
 
         # dof to evaluate the error
         self.errorMit_dof = 'rot_x'  # possible values are: 'tr_z', 'rot_x', 'rot_y'
@@ -61,14 +61,14 @@ class NodeClass():
 
         # flipper joints mu function set-point
         self.sp_muF = {
-            'p1': np.deg2rad(80),
-            'p2': np.deg2rad(140)
+            'p1': np.deg2rad(115),
+            'p2': np.deg2rad(145)
         }
 
         # ground distance mu function set-point
         self.sp_muG = {
-            'p1': 0.3,
-            'p2': 0.3
+            'p1': 0.2,
+            'p2': 0.4
         }
 
 
@@ -100,7 +100,7 @@ class NodeClass():
         self.muF_kmu = 0.0
 
         # ground distance Mu function gain
-        self.muG_kmu = 0.0
+        self.muG_kmu = 0.8
 
 
 
@@ -112,7 +112,7 @@ class NodeClass():
         self.sp_ori_home = np.deg2rad([0, 0, 0])
 
         # flipper joints mu function set-point
-        self.sp_muF_home = np.deg2rad(110)
+        self.sp_muF_home = np.deg2rad(130)
 
         # ground distance mu function set-point
         self.sp_muG_home = 0.25 # in [m]
@@ -139,7 +139,7 @@ class NodeClass():
         self.p_flagSavingPic = True
 
         # path to the folder where results are going to be stored
-        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/data/rot_x'
+        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/data/mu_gnd'
 
         # axes labels resolution
         self.p_yLabelRes = 12
@@ -272,28 +272,28 @@ class NodeClass():
                 rospy.loginfo('[%s] Going to P1.', self.node_name)
                 self.setBulkSP(self.sp_tr['p1'], self.sp_ori['p1'], self.sp_muF['p1'], self.sp_muG['p1'])
 
-                self.waitErrorMitigation(node_rate_sleep, 5, 20)
+                self.waitErrorMitigation(node_rate_sleep, 10, 20)
 
                 # going to SP2
                 rospy.loginfo('[%s] Going go P2.', self.node_name)
                 self.setBulkSP(self.sp_tr['p2'], self.sp_ori['p2'], self.sp_muF['p2'], self.sp_muG['p2'])
 
                 # condition for going to another point
-                self.waitErrorMitigation(node_rate_sleep, 5, 20)
+                self.waitErrorMitigation(node_rate_sleep, 10, 20)
 
                 # going to back SP1
                 rospy.loginfo('[%s] Going back to P1.', self.node_name)
                 self.setBulkSP(self.sp_tr['p1'], self.sp_ori['p1'], self.sp_muF['p1'], self.sp_muG['p1'])
 
                 # condition for going to another point
-                self.waitErrorMitigation(node_rate_sleep, 5, 20)
+                self.waitErrorMitigation(node_rate_sleep, 10, 20)
 
                 # sending the robot to home position
                 rospy.loginfo('[%s] Going to Home pose.', self.node_name)
                 self.setBulkSP(self.sp_tr_home, self.sp_ori_home, self.sp_muF_home, self.sp_muG_home) 
 
                 # condition for going to another point
-                self.waitErrorMitigation(node_rate_sleep, 5, 20)
+                self.waitErrorMitigation(node_rate_sleep, 10, 20)
 
                 # deactivating logging
                 self.flag_logging = False
@@ -310,7 +310,7 @@ class NodeClass():
                 axes[0].plot(self.log['vicon_time'], np.rad2deg(  self.log['vicon_rot_x']  ), color=self.c_redLight, linestyle='dashed', label='vicon', lw=self.p_lw_vicon)
                 axes[0].plot(self.log['sp_time'], np.rad2deg(  self.log['sp_rot_x']  ), color=self.c_black, linestyle='dashed', label='sp', lw=self.p_lw_sp)
 
-                axes[0].set_title(  'rot x  -  kp:'+format(self.kp_rot_v[0], '.2f')+',  ki:'+format(self.ki_rot_v[0], '.2f')  )
+                axes[0].set_title(  'rot x  -  kp:'+format(self.kp_rot_v[0], '.2f')+',  ki:'+format(self.ki_rot_v[0], '.2f')+', kmuFlp:'+format(self.muF_kmu, '.2f')+', kmuGrn:'+format(self.muG_kmu,'.2f')  )
                 axes[0].set_ylabel('angle [deg]', color=self.c_gray)
 
                 y_locator = axes[0].yaxis.get_major_locator()
@@ -334,7 +334,7 @@ class NodeClass():
                 #---> tr z
                 axes[2].plot(self.log['model_time'], 100 * np.array( self.log['model_tr_z'] ), color=self.c_blue, label='ctrl', lw=self.p_lw_model) # converting log data to centimeters
                 axes[2].plot(self.log['vicon_time'], 100 * np.array( self.log['vicon_tr_z'] ), color=self.c_redLight, linestyle='dashed', label='vicon', lw=self.p_lw_vicon) # converting log data to centimeters
-                axes[2].plot(self.log['sp_time'], 100 * np.array( self.log['sp_tr_z'] ), color=self.c_black, linestyle='dashed', label='sp', lw=self.p_lw_sp)
+                #axes[2].plot(self.log['sp_time'], 100 * np.array( self.log['sp_tr_z'] ), color=self.c_black, linestyle='dashed', label='sp', lw=self.p_lw_sp)
 
                 axes[2].set_title(  'tr z  -  kp:'+format(self.kp_tr_v[2], '.2f')+',  ki:'+format(self.ki_tr_v[2], '.2f')  )
                 axes[2].set_ylabel('distance [cm]', color=self.c_gray)
