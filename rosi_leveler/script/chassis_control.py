@@ -62,7 +62,7 @@ class NodeClass():
 
         #------ Mu function for the Flippers lever angle optimization function
         # propulsion joints angular set-point for the null-space
-        self.muf_flpJointPosSp_l = 4*[np.deg2rad(120)]
+        self.muf_flpJointPosSp_l = 4*[np.deg2rad(130)]
 
         # mu function gain
         self.muf_kmu_l = 4*[0.3]
@@ -111,7 +111,7 @@ class NodeClass():
         }
 
         # default control type
-        self.ctrlType_curr = self.chassisCtrlType['articulation']
+        self.ctrlType_curr = self.chassisCtrlType['orientationNullSpace_FlpJnt']
 
         # for storing joints and w function last values
         self.last_jointPos = None
@@ -254,8 +254,16 @@ class NodeClass():
                         u_o_R_v = np.zeros([2,1])
 
                         # proportional control signal component
-                        u_o_R_q_Prop = np.multiply(self.kp_o_q.conj().components, e_o_R_q.components)
-                        u_o_R_v += np.array([u_o_R_q_Prop[1], u_o_R_q_Prop[2]]).reshape(2,1)
+                        #u_o_R_q_Prop = np.multiply(self.kp_o_q.conj().components, e_o_R_q.components)
+                        #u_o_R_v += np.array([u_o_R_q_Prop[1], u_o_R_q_Prop[2]]).reshape(2,1)
+
+                        ## ---------- TEST ZONE
+
+                        e_rpy = quat2rpy(e_o_R_q)
+                        u_o_R_v += np.array(  [kp*e for kp,e in zip(self.kp_o_q.components[1:3], e_rpy[0:2])]   ).reshape(2,1)
+
+                    
+                        ### --------- END OF TEST ZONE
 
                         # integrative control signal component
                         u_o_R_v += self.OriIntegrCtrlSig_compute(e_o_R_q, self.ki_rot_v, dt, self.intgrMthd)
