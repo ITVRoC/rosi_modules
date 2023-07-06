@@ -78,7 +78,7 @@ class NodeClass():
 
         #------ Error integration parameters
         # orientation error integration method
-        self.intgrMthd = 'quaternion' # possible values are 'rpy' and 'quaternion'
+        self.intgrMthd = 'rpy' # possible values are 'rpy' and 'quaternion'
 
 
         #---- Clipping 
@@ -111,7 +111,7 @@ class NodeClass():
         }
 
         # default control type
-        self.ctrlType_curr = self.chassisCtrlType['orientationNullSpace_FlpJnt']
+        self.ctrlType_curr = self.chassisCtrlType['articulation']
 
         # for storing joints and w function last values
         self.last_jointPos = None
@@ -130,6 +130,12 @@ class NodeClass():
         ##========= One-time calculations ===================================
         # computing the set-points in orientation quaternion and pose dual quaternion
         self.x_sp_ori_q, self.x_sp_dq  = self.convertSetPoints2DqFormat(x_sp_tr, x_sp_ori_rpy)
+
+        # orientation controller Proportional gain in vector format
+        self.kp_o_v = np.array(kp_rot_v[0:2]).reshape(2,1)
+
+        # articulation controller Proportional gain in vector format
+        self.kp_a_v = np.array( [kp_tr_v[2], kp_rot_v[0], kp_rot_v[1]]  ).reshape(3,1)
 
         # orientation controller Proportional gain in quaternion format
         self.kp_o_q = np.quaternion(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2])
@@ -250,6 +256,10 @@ class NodeClass():
                         # computing the orientation error
                         e_o_R_q = self.x_sp_ori_q.conj() * x_o_R_q
 
+                        # mounting the orientation error vector
+                        e_rpy = quat2rpy(e_o_R_q)
+                        e_o_v = np.array([e_rpy[0], e_rpy[1]]).reshape(2,1)
+
                         # the variable to receive the control signal
                         u_o_R_v = np.zeros([2,1])
 
@@ -259,13 +269,13 @@ class NodeClass():
 
                         ## ---------- TEST ZONE
 
-                        e_rpy = quat2rpy(e_o_R_q)
-                        u_o_R_v += np.array(  [kp*e for kp,e in zip(self.kp_o_q.components[1:3], e_rpy[0:2])]   ).reshape(2,1)
+                        # computing the proportional control signal
+                        u_o_R_v += self.kp_o_v * e_o_v
+                        
 
-                    
                         ### --------- END OF TEST ZONE
 
-                        # integrative control signal component
+                        # computing the integrative control signal component
                         u_o_R_v += self.OriIntegrCtrlSig_compute(e_o_R_q, self.ki_rot_v, dt, self.intgrMthd)
 
                         # transforming the control signal from {R} space to {Pi}
@@ -308,11 +318,20 @@ class NodeClass():
 
                         # variable to receive the control signal in {R} space
                         u_a_R = np.zeros([3,1])
+                        
+                        # mounting the articulation error vector
+                        e_rpy = dq2rpy(e_a_R_dq)
+                        e_tr = dqExtractTransV3(e_a_R_dq)                        
+                        e_v = np.array( [e_tr[2][0], e_rpy[0], e_rpy[1]] ).reshape(3,1)
 
-                        # computing Proportional control signal
-                        u_a_R_dq = dqElementwiseMul(self.kp_a_dq.conj(), e_a_R_dq) # kp_dq.conj
-                        u_a_R_tr, u_a_R_q = dq2trAndQuatArray(u_a_R_dq)
-                        u_a_R += np.array([u_a_R_tr[2][0], u_a_R_q.components[1], u_a_R_q.components[2]]).reshape(3,1)
+                        # computing the Proportional control signal
+                        u_a_R  += np.array([-1,1,1]).reshape(3,1) * self.kp_a_v * e_v
+
+                        #print(u_a_R.flatten())
+
+                        #u_a_R_dq = dqElementwiseMul(self.kp_a_dq.conj(), e_a_R_dq) # kp_dq.conj
+                        #u_a_R_tr, u_a_R_q = dq2trAndQuatArray(u_a_R_dq)
+                        #u_a_R += np.array([u_a_R_tr[2][0], u_a_R_q.components[1], u_a_R_q.components[2]]).reshape(3,1)
 
                         # computing the Integrator control signal
                         u_a_R += self.ArtIntegrCtrlSig_compute(e_a_R_dq, self.ki_rot_v, self.ki_tr_v, dt, self.intgrMthd)
