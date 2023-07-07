@@ -111,7 +111,7 @@ class NodeClass():
         }
 
         # default control type
-        self.ctrlType_curr = self.chassisCtrlType['articulation']
+        self.ctrlType_curr = self.chassisCtrlType['orientationNullSpace_FlpJnt']
 
         # for storing joints and w function last values
         self.last_jointPos = None
