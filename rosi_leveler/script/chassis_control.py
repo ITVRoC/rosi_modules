@@ -44,10 +44,10 @@ class NodeClass():
 
         #--> Proportional
         # translation control gain per DOF
-        kp_tr_v = [0.0, 0.0, 1.0]
+        kp_tr_v = [0.0, 0.0, 1.1]
 
         # orientation controller Proportional gain per DOF
-        kp_rot_v = [2.65, 2.75, 0.0]
+        kp_rot_v = [1.5, 1.1, 0.0]
 
 
         #--> Integrative
@@ -55,7 +55,7 @@ class NodeClass():
         ki_tr_v = [0.0, 0.0, 0.0]
 
         # orientation controller Integrative gain per DOF
-        ki_rot_v = [0.01, 0.02, 0.0] 
+        ki_rot_v = [0.0, 0.0, 0.0] 
 
         
 

@@ -28,7 +28,7 @@ class NodeClass():
 
         ##=== Parameters
 
-        # base velocities to applys
+        # base velocities to apply
         self.vl = [0.15, 0.0, 0.0]
         self.va = [0.0, 0.0, 0.0]
 
