@@ -33,7 +33,7 @@ class NodeClass():
         ##-------------- Controller parameters -------------------------
 
         # desired control type
-        self.ctrlTypeDes = "orientation" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
+        self.ctrlTypeDes = "orientationNullSpace_FlpJnt" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
 
         # experiment type
         self.p_ExperimentType = 'circle' # possible values are: 'step', 'circle'
@@ -116,7 +116,7 @@ class NodeClass():
 
         ##------------- Runtime parameters ---------------------
         # node rate sleep [Hz]
-        self.p_rateSleep = 25
+        self.p_rateSleep = 10
 
         # chassis control service prefix
         cc_pr = '/chassis_control'
@@ -325,13 +325,14 @@ class NodeClass():
         self.flag_logging = False
 
 
+
     def expCircle(self, node_rate_sleep):
         
         # parameters
         n_points = 100
         circAmplitude = np.deg2rad(10)       # in [rad]
         heightAmplitude = 0.0               # in [m] 
-        timeNextPoint = rospy.Duration.from_sec(0.5)                  # in [s]
+        timeNextPoint = rospy.Duration.from_sec(0.1)                  # in [s]
 
         # creates the circle set-point for each dof
         iter_l = np.linspace(0, 2*np.pi, n_points)
