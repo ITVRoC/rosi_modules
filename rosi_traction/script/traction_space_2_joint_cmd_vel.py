@@ -81,7 +81,7 @@ class NodeClass():
 
                     # preparing the contact plane vector
                     n_cp = np.array([self.msg_n_cp.vector.x, self.msg_n_cp.vector.y, self.msg_n_cp.vector.z]).reshape(3,1)
-
+#
                     # iterates for all four locomotion mechanisms
                     jCmdVel_l = []
                     for tchStatus, v_Pi_i in zip(self.msg_flpTouchStatus, self.msg_v_Pi_V.vec ):
