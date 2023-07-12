@@ -97,6 +97,7 @@ class NodeClass():
                         v_Pi = np.array([v_Pi_i.x, v_Pi_i.y, v_Pi_i.z]).reshape(3,1)
                         v_Pi_norm = np.linalg.norm(v_Pi)
 
+
                         if v_Pi_norm != 0: # only executes if a valid command has been received
 
                             # angle between the dof axis and the input velocity vector
