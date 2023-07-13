@@ -33,7 +33,7 @@ class NodeClass():
         ##-------------- Controller parameters -------------------------
 
         # desired control type
-        self.ctrlTypeDes = "orientationNullSpace_FlpJnt" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
+        self.ctrlTypeDes = "articulation" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
 
         # experiment type
         self.p_ExperimentType = 'step' # possible values are: 'step', 'circle'
@@ -85,32 +85,40 @@ class NodeClass():
             'p2': 0.33
         }
 
+        # time for wait within error range
+        self.p_timeWithin = 5 #[s]
+
+        # time for wait outside error range
+        self.p_timeOutside = 10 #[s]
+
 
 
         ##------- Controller gains ---------------
 
         # ---> translation gains
         # translation Proportional control gain per DOF
-        self.kp_tr_v = [0.0, 0.0, 0.9]
+        self.kp_tr_v = [0.0, 0.0, 0.0]
 
         # translational Integrator control gain per DOF
         self.ki_tr_v = [0.0, 0.0, 0.0]
 
 
-        # ---> rotation gains
+        # ---> Rotation gains
         # orientation Proportional controller gain per DOF
-        self.kp_rot_v = [1.5, 1.1, 0.0]
+        self.kp_rot_v = [0.0, 3.5, 0.0]
 
         # orientation Integrator control gain per DOF
         self.ki_rot_v = [0.0, 0.0, 0.0]       
 
         
+
         #---> Mu functions gains
         # flipper Mu function gain
         self.muF_kmu = 0.25
 
         # ground distance Mu function gain
         self.muG_kmu = 0.85
+
 
 
 
@@ -129,12 +137,15 @@ class NodeClass():
         }
 
 
+
+
+
         #------------------ Saving/Plotting parameters -------------------
         # flag for saving or not the plottings
-        self.p_flagSavingPic = False
+        self.p_flagSavingPic = True
 
         # path to the folder where results are going to be stored
-        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/test'
+        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/tuning/rot_y'
 
         # axes labels resolution
         self.p_yLabelRes = 12
@@ -291,34 +302,34 @@ class NodeClass():
         self.flag_logging = True
 
         # condition for going to another point
-        self.waitErrorMitigation(node_rate_sleep, 5, 5)
+        self.waitErrorMitigation(node_rate_sleep, self.p_timeWithin, self.p_timeOutside)
 
         # going to SP1
         rospy.loginfo('[%s] Going to P1.', self.node_name)
         self.setBulkSP(self.sp_tr['p1'], self.sp_ori['p1'], self.sp_muF['p1'], self.sp_muG['p1'])
 
-        self.waitErrorMitigation(node_rate_sleep, 5, 20)
+        self.waitErrorMitigation(node_rate_sleep, self.p_timeWithin, self.p_timeOutside)
 
         # going to SP2
         rospy.loginfo('[%s] Going go P2.', self.node_name)
         self.setBulkSP(self.sp_tr['p2'], self.sp_ori['p2'], self.sp_muF['p2'], self.sp_muG['p2'])
 
         # condition for going to another point
-        self.waitErrorMitigation(node_rate_sleep, 5, 20)
+        self.waitErrorMitigation(node_rate_sleep, self.p_timeWithin, self.p_timeOutside)
 
         # going to back SP1
         rospy.loginfo('[%s] Going back to P1.', self.node_name)
         self.setBulkSP(self.sp_tr['p1'], self.sp_ori['p1'], self.sp_muF['p1'], self.sp_muG['p1'])
 
         # condition for going to another point
-        self.waitErrorMitigation(node_rate_sleep, 5, 20)
+        self.waitErrorMitigation(node_rate_sleep, self.p_timeWithin, self.p_timeOutside)
 
         # sending the robot to home position
         rospy.loginfo('[%s] Going to Home pose.', self.node_name)
         self.setBulkSP(self.sp_tr_home, self.sp_ori_home, self.sp_muF_home, self.sp_muG_home) 
 
         # condition for going to another point
-        self.waitErrorMitigation(node_rate_sleep, 5, 20)
+        self.waitErrorMitigation(node_rate_sleep, self.p_timeWithin, self.p_timeOutside)
 
         # deactivating logging
         self.flag_logging = False
@@ -441,7 +452,7 @@ class NodeClass():
         #--> saving figures
 
         # saving in high-res eps format
-        plt.savefig(saveDataFolder+'/plot.eps', dpi=300, format='eps')
+        plt.savefig(saveDataFolder+'/plot.svg', format='svg')
 
         # saving in png format
         plt.savefig(self.p_expFolderPath+'/'+dateStr+'.png', dpi=300, format='png')
@@ -476,8 +487,9 @@ class NodeClass():
             writer.writerows(csv_data_sp)
 
 
+
     def cllbck_gt_basePose(self, msg):
-        '''Callback for the ROSI base twist'''
+        '''Callback for the ROSI base twist measured by Vicon'''
         self.gt_basePose_msg = msg
 
         # logs received data

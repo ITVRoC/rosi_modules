@@ -1,25 +1,34 @@
 '''This file implements tools for using with the vicon system'''
 import rospy
+import numpy as np
 
-from rosi_common.dq_tools import trAndOri2dq
+from rosi_common.dq_tools import trAndOri2dq, rpy2quat
+
+
+# ---> Parameters
 
 # ROSI base Vicon marker pose wrt frame {R}
-p_marker_offset_tr = [-0.14999997615814, 0.0, 0.18100000917912]
-p_marker_offset_q = [0.70153158903122, 0.0, 0.0, -0.71263885498047]
+p_marker_R_tr = [-0.14999997615814, 0.0, 0.18100000917912]
+p_marker_R_q = [0.70153158903122, 0.0, 0.0, -0.71263885498047]
 
-# Offset between rosi model vertical position and the vicon area
-p_vertOffsetModelAndVicon = 0.0342 + 0.01
 
-# applyint the vertical offset directly to the marker
-p_marker_offset_tr[2] += p_vertOffsetModelAndVicon
+# marker calibration correction offset
+p_corrOffset = {
+    'tr_z': -0.03475,
+    'rot_x': np.deg2rad(0.35),
+    'rot_y': np.deg2rad(1.37)
+}
 
-# computing the offset dual-quaternion
-p_marker_offset_dq = trAndOri2dq(p_marker_offset_tr, p_marker_offset_q, 'trfirst')
+# ---> Preamble
+# computing the dual quaternion from the marker to the robot
+p_marker_R_dq = trAndOri2dq(p_marker_R_tr, p_marker_R_q, 'trfirst')
 
-# computing the vertical position offset considering vicon reading and rosi_model ground distance output
+# computing the calibration correction dual quaternion
+p_corrOffset_q = rpy2quat([p_corrOffset['rot_x'], p_corrOffset['rot_y'], 0])
+p_corrOffset_dq = trAndOri2dq(  [0,0,p_corrOffset['tr_z']], p_corrOffset_q, 'trfirst'  )
 
 
 # method that returns the base pose dual quaternion given marker current pose
 def getBasePoseFromMarkerDq(marker_dq):
-    return marker_dq * p_marker_offset_dq.conj()
+    return marker_dq * p_marker_R_dq.conj() * p_corrOffset_dq
 

@@ -34,30 +34,29 @@ class NodeClass():
 
         #----------------- SET-POINT ------------------------------
         # orientation
-        x_sp_ori_rpy = np.deg2rad([0, 0, 0]) # final vector is in radians RPY
+        x_sp_ori_rpy = np.deg2rad([0, -10, 0]) # final vector is in radians RPY
         
         # ground distance
         x_sp_tr = [0.0, 0.0, 0.3] # in meters
        
 
         #----------------- CONTROL GAINS ------------------------------
-
-        #--> Proportional
+        #--> Translational gains
         # translation control gain per DOF
-        kp_tr_v = [0.0, 0.0, 1.1]
+        kp_tr_v = [0.0, 0.0, 0.0]
 
-        # orientation controller Proportional gain per DOF
-        kp_rot_v = [1.5, 1.1, 0.0]
-
-
-        #--> Integrative
         # translation control gain per DOF
         ki_tr_v = [0.0, 0.0, 0.0]
+
+
+        #--> Rotation gains
+        # orientation controller Proportional gain per DOF
+        kp_rot_v = [0.0, 3.5, 0.0]
 
         # orientation controller Integrative gain per DOF
         ki_rot_v = [0.0, 0.0, 0.0] 
 
-    
+
 
         #------ Mu function for the Flippers lever angle optimization function
         # propulsion joints angular set-point for the null-space
@@ -68,13 +67,16 @@ class NodeClass():
 
 
         #------ Mu function for the Chassis ground height optimization function
-        # mu function gain 
-        self.mug_kmu_l = 0.25
-
         # ground distance set-point
         self.mug_grndDstncSp_l = 0.85
+        
+        # mu function gain 
+        self.mug_kmu_l = 0.25
+    
 
 
+
+        ##=== Controller parameters
         #----- Method for generating the control signal
         # this variable dictactes how the proportional and integrative control signal are generates
         self.oriCtrlPropSigMthd = 'quaternion' # possible values are 'rpy' and 'quaternion'
@@ -236,17 +238,12 @@ class NodeClass():
                     # updates dt
                     dt = ( ros_time - time_last ).to_sec()
 
-                    # setting the imu ROS data in the numpy quaternion format
+                    # converting the imu ROS data in the numpy quaternion format
                     q_imu = quatAssurePosW(  np.quaternion(self.msg_imu.orientation.w, self.msg_imu.orientation.x, self.msg_imu.orientation.y, self.msg_imu.orientation.z)  )
 
-                    # computing the yaw canceler rotation quaternion
-                    rpy = quat2rpy(q_imu)
-                    q_yawcorr = rpy2quat([0, 0, rpy[2]])
-                    q_yawcorr = np.quaternion(q_yawcorr[0], q_yawcorr[1], q_yawcorr[2], q_yawcorr[3])
-
-
-                    # defining the chassis orientation state as the IMU reading without the yaw component
-                    x_o_R_q = q_imu * q_yawcorr
+                    # creating a orientation quaternion without the yaw component
+                    rpy_imu = quat2rpy(q_imu)
+                    x_o_R_q = rpy2quat([rpy_imu[0], rpy_imu[1], 0])
 
                     # defining the articulation pose state
                     x_a_R_dq = trAndOri2dq([0, 0, self.msg_grndDist.vec[0].z], x_o_R_q, 'trfirst')
@@ -260,7 +257,6 @@ class NodeClass():
                         #--> Error
                         # computing the orientation error
                         e_o_R_q = self.x_sp_ori_q.conj() * x_o_R_q
-
 
                         #--> Control signal
                         # the variable to receive the control signal
@@ -310,6 +306,15 @@ class NodeClass():
                         # computing the pose error
                         e_a_R_dq = self.x_sp_dq.conj() * x_a_R_dq
 
+
+
+
+
+
+
+
+
+
                         #--> Control signal
                         # variable to receive the control signal in {R} space
                         u_a_R = np.zeros((3,1))
@@ -322,7 +327,7 @@ class NodeClass():
 
                         # transforming the control signal from {R} space to {Pi}
                         u_Pi_v = np.dot(self.J_art_dagger, u_a_R)
-     
+    
 
                     # If the selected control mode is invalid
                     else:
