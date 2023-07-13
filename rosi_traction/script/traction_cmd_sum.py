@@ -31,7 +31,7 @@ class NodeClass():
 
         # possible frame_ids to publish into /rosi/flippers/joint/cmd_vel
         self.pubNodesId = (
-            'traction_space_2_joint_cmd_vel',
+            'base_space_2_traction_joint_cmd_vel',
             'traction_flipper_risal_compensator'
         )
 
