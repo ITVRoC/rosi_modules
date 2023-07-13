@@ -56,3 +56,22 @@ def quatExp(q_in):
     exp_q = np.quaternion( *np.hstack([exp_w, exp_v]) )
 
     return exp_q
+
+
+def quatExpFromMatlab(q_in):
+    '''Computes the exponential of a quaternion element based on the Matlab implementation'''
+    
+    # extracting real and imaginary components from the quaternion
+    p = q_in.components[0]
+    v = np.array(q_in.components[1:])
+
+    # computing the norm o v
+    v_n = np.linalg.norm(v)
+
+    if v_n != 0: # in case that the vector part has non-null norm
+        # computing the exponential quaternion
+        q_exp = np.exp(p) * np.hstack([np.cos(v_n), np.sin(v_n)*(v/v_n)])
+    else:   
+        q_exp = np.array([np.exp(p)*np.cos(v_n), 0, 0, 0])
+
+    return np.quaternion(*q_exp)

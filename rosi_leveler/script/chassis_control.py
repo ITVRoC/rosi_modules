@@ -12,9 +12,9 @@ from rosi_common.dq_tools import quat2rpy, rpy2quat, trAndOri2dq, dqElementwiseM
 from rosi_common.rosi_tools import correctFlippersJointSignal, compute_J_ori_dagger, compute_J_art_dagger
 from rosi_common.node_status_tools import nodeStatus
 from rosi_model.rosi_description import tr_base_piFlp
-from rosi_common.math_tools import quatExp
+from rosi_common.math_tools import quatExpFromMatlab
 
-from rosi_common.msg import Float32Array, Vector3ArrayStamped, DualQuaternionStamped
+from rosi_common.msg import  Vector3ArrayStamped, DualQuaternionStamped
 from sensor_msgs.msg import Imu, JointState
 from geometry_msgs.msg import Vector3
 
@@ -77,7 +77,11 @@ class NodeClass():
 
         #----- Method for generating the control signal
         # this variable dictactes how the proportional and integrative control signal are generates
-        self.oriCtrlSigMthd = 'quaternion' # possible values are 'rpy' and 'quaternion'
+        self.oriCtrlPropSigMthd = 'quaternion' # possible values are 'rpy' and 'quaternion'
+
+        #------ Error integration parameters
+        # orientation error integration method
+        self.ctrlntgrMthd = 'rpy' # possible values are 'rpy' and 'quaternion'
 
 
         #---- Clipping 
@@ -263,10 +267,10 @@ class NodeClass():
                         u_o_R_v = np.zeros([2,1])
 
                         # computing the proportional control signal
-                        u_o_R_v += self.OriPropCtrlSig_compute(e_o_R_q, self.oriCtrlSigMthd)
+                        u_o_R_v += self.OriPropCtrlSig_compute(e_o_R_q, self.oriCtrlPropSigMthd)
 
                         # computing the integrative control signal component
-                        u_o_R_v += self.OriIntegrCtrlSig_compute(e_o_R_q, self.ki_rot_v, dt, self.oriCtrlSigMthd)
+                        u_o_R_v += self.OriIntegrCtrlSig_compute(e_o_R_q, self.ki_rot_v, dt, self.ctrlntgrMthd )
 
                         # transforming the control signal from {R} space to {Pi}
                         u_Pi_v =  np.dot(self.J_ori_dagger, u_o_R_v)
@@ -311,14 +315,10 @@ class NodeClass():
                         u_a_R = np.zeros((3,1))
                         
                         # computing the Proportional control signal
-                        u_a_R += self.ArtPropCtrlSig_compute(e_a_R_dq, self.oriCtrlSigMthd)
-
-
-
-                        # ==> 
+                        u_a_R += self.ArtPropCtrlSig_compute(e_a_R_dq, self.oriCtrlPropSigMthd)
 
                         # computing the Integrator control signal
-                        u_a_R += self.ArtIntegrCtrlSig_compute(e_a_R_dq, self.ki_rot_v, self.ki_tr_v, dt, self.oriCtrlSigMthd)
+                        u_a_R += self.ArtIntegrCtrlSig_compute(e_a_R_dq, self.ki_rot_v, self.ki_tr_v, dt, self.ctrlntgrMthd )
 
                         # transforming the control signal from {R} space to {Pi}
                         u_Pi_v = np.dot(self.J_art_dagger, u_a_R)
@@ -468,7 +468,7 @@ class NodeClass():
             self.ctrlOriIntrg_eRpyAccu += 0.5 * dt * (self.ctrlOriIntrg_eRpyLast + e_rpy) 
 
             # computes the control signal
-            u = ki * self.ctrlOriIntrg_eRpyAccu 
+            u = (ki * self.ctrlOriIntrg_eRpyAccu).flatten()
 
             # updating the last rpy error variable
             self.ctrlOriIntrg_eRpyLast = e_rpy
@@ -488,7 +488,7 @@ class NodeClass():
             k_avg = (k1 + 2*k2 + 2*k3 + k4) / 6
 
             # integrates the current orientation error by accumulation 
-            self.q_e_acc = self.q_e_acc * quatExp(0.5 * k_avg)
+            self.q_e_acc = self.q_e_acc * quatExpFromMatlab(0.5 * k_avg)
 
             # treates the obtained signal
             self.q_e_acc = (quatAssurePosW(self.q_e_acc)).normalized()
@@ -537,7 +537,6 @@ class NodeClass():
         # returns the articulation integrative control signal
         return u
         
-
 
     def IntegrCtrlSig_zerateAcc(self):
         '''Zerates the integrative signal accumulator variable'''
