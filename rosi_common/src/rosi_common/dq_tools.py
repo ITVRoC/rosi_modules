@@ -176,7 +176,7 @@ def dqExtractTransV3(dq_in):
     ''' Extracts the translation from a dual-quaternionelement 
     as a R3 vector '''
     q_p, q_d = dqExtractQuaternions(dq_in)
-    q_tr = (q_d * 2) * q_p.conj()
+    q_tr = 2 * q_d * q_p.conj()
     return q_tr.components[1:4].reshape(3,1)
     
 

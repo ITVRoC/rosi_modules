@@ -57,8 +57,7 @@ class NodeClass():
         # orientation controller Integrative gain per DOF
         ki_rot_v = [0.0, 0.0, 0.0] 
 
-        
-
+    
 
         #------ Mu function for the Flippers lever angle optimization function
         # propulsion joints angular set-point for the null-space
@@ -76,9 +75,9 @@ class NodeClass():
         self.mug_grndDstncSp_l = 0.85
 
 
-        #------ Error integration parameters
-        # orientation error integration method
-        self.intgrMthd = 'rpy' # possible values are 'rpy' and 'quaternion'
+        #----- Method for generating the control signal
+        # this variable dictactes how the proportional and integrative control signal are generates
+        self.oriCtrlSigMthd = 'quaternion' # possible values are 'rpy' and 'quaternion'
 
 
         #---- Clipping 
@@ -111,7 +110,7 @@ class NodeClass():
         }
 
         # default control type
-        self.ctrlType_curr = self.chassisCtrlType['orientation']
+        self.ctrlType_curr = self.chassisCtrlType['articulation']
 
         # for storing joints and w function last values
         self.last_jointPos = None
@@ -138,7 +137,7 @@ class NodeClass():
         self.kp_a_v = np.array( [kp_tr_v[2], kp_rot_v[0], kp_rot_v[1]]  ).reshape(3,1)
 
         # orientation controller Proportional gain in quaternion format
-        #self.kp_o_q = np.quaternion(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2])
+        self.kp_o_q = np.quaternion(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2])
 
         # articulation  controller Proportional gain in dual quaternion format
         self.kp_a_dq = DQ(1, kp_rot_v[0], kp_rot_v[1], kp_rot_v[2], 1, kp_tr_v[0], kp_tr_v[1], kp_tr_v[2])  
@@ -254,25 +253,23 @@ class NodeClass():
                         or self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_FlpJnt'] \
                         or self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_GrndHght']:
                         
+                        #--> Error
                         # computing the orientation error
                         e_o_R_q = self.x_sp_ori_q.conj() * x_o_R_q
 
-                        # mounting the orientation error vector
-                        e_rpy = quat2rpy(e_o_R_q)
-                        e_o_v = np.array([e_rpy[0], e_rpy[1]]).reshape(2,1)
 
+                        #--> Control signal
                         # the variable to receive the control signal
                         u_o_R_v = np.zeros([2,1])
 
                         # computing the proportional control signal
-                        u_o_R_v += self.kp_o_v * e_o_v
+                        u_o_R_v += self.OriPropCtrlSig_compute(e_o_R_q, self.oriCtrlSigMthd)
 
                         # computing the integrative control signal component
-                        u_o_R_v += self.OriIntegrCtrlSig_compute(e_o_R_q, self.ki_rot_v, dt, self.intgrMthd)
+                        u_o_R_v += self.OriIntegrCtrlSig_compute(e_o_R_q, self.ki_rot_v, dt, self.oriCtrlSigMthd)
 
                         # transforming the control signal from {R} space to {Pi}
                         u_Pi_v =  np.dot(self.J_ori_dagger, u_o_R_v)
-
 
                         # treats the case when the null-space optimization control mode is enabled
                         if self.ctrlType_curr == self.chassisCtrlType['orientationNullSpace_FlpJnt'] or \
@@ -305,22 +302,23 @@ class NodeClass():
                     # If the control mode is articulation
                     elif self.ctrlType_curr == self.chassisCtrlType['articulation']:
 
+                        #--> Error
                         # computing the pose error
                         e_a_R_dq = self.x_sp_dq.conj() * x_a_R_dq
 
+                        #--> Control signal
                         # variable to receive the control signal in {R} space
-                        u_a_R = np.zeros([3,1])
+                        u_a_R = np.zeros((3,1))
                         
-                        # mounting the articulation error vector
-                        e_rpy = dq2rpy(e_a_R_dq)
-                        e_tr = dqExtractTransV3(e_a_R_dq)                        
-                        e_v = np.array( [e_tr[2][0], e_rpy[0], e_rpy[1]] ).reshape(3,1)
-
                         # computing the Proportional control signal
-                        u_a_R  += np.array([-1,1,1]).reshape(3,1) * self.kp_a_v * e_v
+                        u_a_R += self.ArtPropCtrlSig_compute(e_a_R_dq, self.oriCtrlSigMthd)
+
+
+
+                        # ==> 
 
                         # computing the Integrator control signal
-                        u_a_R += self.ArtIntegrCtrlSig_compute(e_a_R_dq, self.ki_rot_v, self.ki_tr_v, dt, self.intgrMthd)
+                        u_a_R += self.ArtIntegrCtrlSig_compute(e_a_R_dq, self.ki_rot_v, self.ki_tr_v, dt, self.oriCtrlSigMthd)
 
                         # transforming the control signal from {R} space to {Pi}
                         u_Pi_v = np.dot(self.J_art_dagger, u_a_R)
@@ -381,6 +379,74 @@ class NodeClass():
 
 
     ''' === Support methods callbacks ==='''
+
+    def OriPropCtrlSig_compute(self, e_q, oriCtrlSigMthd):
+        '''Method that computes the proportional controller gain for the orientation controller
+        Input
+            - e_q <np.quaternion>: the orientation error in unit quaternion format
+            - oriCtrlSigMthd <string>: the method for generating the orientation control signal. It can bey 'rpy' or 'quaternion'
+        Output
+            The control signal vector <np.array>(2,1) 
+        '''
+        if oriCtrlSigMthd == 'rpy':
+
+            # mounting the orientation error vector
+            e_rpy = quat2rpy(e_q)
+            e_o_v = np.array([e_rpy[0], e_rpy[1]]).reshape(2,1)
+
+            # computing the control signal
+            u = self.kp_o_v * e_o_v
+
+        elif oriCtrlSigMthd == 'quaternion':
+
+            # computing the control signal
+            u_q = np.multiply(self.kp_o_q.conj().components, e_q.components)
+
+            # mounting the orientation control signal vector
+            u = np.array([u_q[1], u_q[2]]).reshape(2,1)
+
+        else:
+            rospy.logerr('[%s] orientation control signal generation type not recognized')
+            return -1
+
+        return u
+        
+
+    def ArtPropCtrlSig_compute(self, e_dq, oriCtrlSigMthd):
+        '''Method that computes the proportional controller gain for the articulation controller
+        Input
+            - e_qq <dqrobotics.DQ>: the articulation error in unit dual quaternion format
+            - oriCtrlSigMthd <string>: the method for generating the orientation control signal. It can bey 'rpy' or 'quaternion'
+        Output
+            The control signal vector <np.array>(3,1) 
+        '''
+        if oriCtrlSigMthd == 'rpy':
+
+            # mounting the articulation error vector
+            e_tr, e_q = dq2trAndQuatArray(e_dq)
+            e_rpy = quat2rpy(e_q)             
+            e_v = np.array( [e_tr[2][0], e_rpy[0], e_rpy[1]] ).reshape(3,1)[ 8]
+
+            # computing the control signal
+            u  = np.array([-1,1,1]).reshape(3,1) * self.kp_a_v * e_v
+
+
+        elif oriCtrlSigMthd == 'quaternion':
+            
+            # computing Proportional control signal
+            u_dq = dqElementwiseMul(self.kp_a_dq.conj(), e_dq) # kp_dq.conj
+
+            # defining the control signal vector
+            u_dq_aux = u_dq.vec8().tolist()
+            u = np.array([-1*u_dq_aux[7], u_dq_aux[1], u_dq_aux[2]]).reshape(3,1)
+
+        else:
+            rospy.logerr('[%s] orientation control signal generation type not recognized')
+            return -1
+        
+        return u
+
+
     def OriIntegrCtrlSig_compute(self, e_q, ki, dt, intgrMthd):
         '''Computes the Integrative control signal for the orientation control
         based on the trapezoidal rule
@@ -541,7 +607,7 @@ class NodeClass():
         self.kp_a_v = np.array( [req.kp_tr[2], req.kp_ori[0], req.kp_ori[1]] ).reshape(3,1)
 
         # orientation controller proportional gain in quaternion format
-        #self.kp_o_q = np.quaternion(1, req.kp_ori[0], req.kp_ori[1], req.kp_ori[2])
+        self.kp_o_q = np.quaternion(1, req.kp_ori[0], req.kp_ori[1], req.kp_ori[2])
 
         # articulation  controller proportional gain in dual quaternion format
         self.kp_a_dq = DQ(1, req.kp_ori[0], req.kp_ori[1], req.kp_ori[2], 1, req.kp_tr[0], req.kp_tr[1], req.kp_tr[2])  

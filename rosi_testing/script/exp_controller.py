@@ -33,10 +33,10 @@ class NodeClass():
         ##-------------- Controller parameters -------------------------
 
         # desired control type
-        self.ctrlTypeDes = "orientation" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
+        self.ctrlTypeDes = "orientationNullSpace_FlpJnt" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
 
         # experiment type
-        self.p_ExperimentType = 'circle' # possible values are: 'step', 'circle'
+        self.p_ExperimentType = 'step' # possible values are: 'step', 'circle'
 
 
         ##------- Home set-points -------------------
@@ -57,7 +57,7 @@ class NodeClass():
         ##------- STEP EXPERIMENT PARAMETERS --- Step Experiment Pose parameters
 
         # dof to evaluate the error
-        self.errorMit_dof = 'rot_x'  # possible values are: 'tr_z', 'rot_x', 'rot_y'
+        self.errorMit_dof = 'rot_y'  # possible values are: 'tr_z', 'rot_x', 'rot_y'
 
         # In the step experiment, the set-points sequency are home -> p1 -> p2 -> p1 -> home
         # The controller will go first to 'p1', then to 'p2', and finally returning to 'p1'
@@ -67,10 +67,10 @@ class NodeClass():
             'p2': [0.0, 0.0, 0.3]
         }
 
-         # orientation set-point
+        # orientation set-point
         self.sp_ori = { # rpy in [rad]
-            'p1': np.deg2rad([-10, -10, 0]),
-            'p2': np.deg2rad([10, 10, 0])
+            'p1': np.deg2rad([0, -10, 0]),
+            'p2': np.deg2rad([0, 10, 0])
         }
 
         # flipper joints mu function set-point
@@ -116,7 +116,7 @@ class NodeClass():
 
         ##------------- Runtime parameters ---------------------
         # node rate sleep [Hz]
-        self.p_rateSleep = 10
+        self.p_rateSleep = 30
 
         # chassis control service prefix
         cc_pr = '/chassis_control'
@@ -129,13 +129,12 @@ class NodeClass():
         }
 
 
-
         #------------------ Saving/Plotting parameters -------------------
         # flag for saving or not the plottings
-        self.p_flagSavingPic = True
+        self.p_flagSavingPic = False
 
         # path to the folder where results are going to be stored
-        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/control_validation/data'
+        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/test'
 
         # axes labels resolution
         self.p_yLabelRes = 12
