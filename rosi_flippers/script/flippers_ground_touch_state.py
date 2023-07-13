@@ -169,7 +169,7 @@ class NodeClass():
                 m = Int8ArrayStamped()
                 m.header.stamp = time_current 
                 m.header.frame_id = 'flippers_ground_touch_state'
-                m.data = ret
+                m.data = ret                
                 self.pub_touchStatus.publish(m)
                 #print(m)
 

@@ -22,7 +22,7 @@
     <node name="base_to_propulsion_cmdVel" pkg="rosi_base" type="base_to_propulsion_cmdVel.py" respawn="true" />
 
     <!-- running the traction_space_2_joint_cmd_vel rosi_space_to_traction_cmd_vel node -->
-    <node name="traction_space_2_joint_cmd_vel" pkg="rosi_traction" type="traction_space_2_joint_cmd_vel.py" respawn="true" />
+    <node name="base_space_2_traction_joint_cmd_vel" pkg="rosi_traction" type="base_space_2_traction_joint_cmd_vel.py" respawn="true" />
 
     <!-- running the rosi_traction traction_flipper_risal_compensator node -->
     <node name="traction_flipper_risal_compensator" pkg="rosi_traction" type="traction_flipper_risal_compensator.py" respawn="true" />

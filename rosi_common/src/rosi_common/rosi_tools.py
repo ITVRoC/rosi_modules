@@ -234,6 +234,29 @@ def compute_J_ori_dagger(tr_R_Pi_l):
     return np.concatenate([J_l], axis=0)
 
 
+def compute_J_mnv_dagger(tr_R_Pi_l):
+    ''' Computes the Maneuvering Kinematics pseudo-inverse already CONSIDERING that all contact points frames are 
+    aligned wrt {R}
+    Input
+        - tr_R_Pi_l <list> a list containing tr_R_Pi_l <np.array> 3D translation vector of {Pi} wrt {R}
+    Output
+        - the Maneuvering Jacobian for the x_Pi axis <np.array>{len(tr_R_Pi_l)x2}
+    '''
+
+    J_l = np.empty((0,2))
+    for tr_R_Pi in tr_R_Pi_l:
+
+        row_x_i = np.array([1, -tr_R_Pi[1][0]])
+        row_y_i = np.array([0, tr_R_Pi[0][0]])
+
+        J_l = np.vstack((J_l, row_x_i))
+        J_l = np.vstack((J_l, row_y_i))
+
+    return J_l
+
+
+
+
 def compute_J_mnvx_dagger(tr_R_Pi_l):
     ''' Computes the Maneuvering Kinematics pseudo-inverse for the x_Pi axis already CONSIDERING that all propulsion frames {Pi} are 
     aligned wrt {R}

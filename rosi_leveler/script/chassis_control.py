@@ -111,7 +111,7 @@ class NodeClass():
         }
 
         # default control type
-        self.ctrlType_curr = self.chassisCtrlType['orientationNullSpace_FlpJnt']
+        self.ctrlType_curr = self.chassisCtrlType['orientation']
 
         # for storing joints and w function last values
         self.last_jointPos = None
@@ -240,6 +240,7 @@ class NodeClass():
                     rpy = quat2rpy(q_imu)
                     q_yawcorr = rpy2quat([0, 0, rpy[2]])
                     q_yawcorr = np.quaternion(q_yawcorr[0], q_yawcorr[1], q_yawcorr[2], q_yawcorr[3])
+
 
                     # defining the chassis orientation state as the IMU reading without the yaw component
                     x_o_R_q = q_imu * q_yawcorr

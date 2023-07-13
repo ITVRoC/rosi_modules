@@ -7,13 +7,13 @@ import rospy
 
 import numpy as np
 
-from rosi_common.msg import Float32Array, Vector3ArrayStamped, Int8ArrayStamped
+from rosi_common.msg import Float32Array, Vector3ArrayStamped, Int8ArrayStamped, TwistStamped
 from geometry_msgs.msg import Vector3Stamped
 
 from rosi_common.node_status_tools import nodeStatus
 from rosi_common.srv import SetNodeStatus, GetNodeStatusList
 
-from rosi_common.rosi_tools import compute_J_traction, tractionJointSpeedGivenLinVel, correctTractionJointSignal
+from rosi_common.rosi_tools import compute_J_traction, tractionJointSpeedGivenLinVel, correctTractionJointSignal, compute_J_mnv_dagger
 
 from rosi_model.rosi_description import coefs_baseLinVel_wrt_trJointSpeed_tracks, coefs_baseLinVel_wrt_trJointSpeed_wheels, rotm_base_piFlp, tr_base_piFlp
 
@@ -32,9 +32,10 @@ class NodeClass():
         # node status object
         self.ns = nodeStatus(node_name)
 
-        self.msg_v_Pi_V = None 
+        self.msg_baseCmdVel = None
         self.msg_flpTouchStatus = None
         self.msg_n_cp = None
+        self.msg_cntctPnt = None
         
         self.x_pi = np.array([1, 0, 0])
 
@@ -49,7 +50,9 @@ class NodeClass():
         self.pub_jointCmdVel = rospy.Publisher('/rosi/traction/joint/cmd_vel/navigation', Float32Array, queue_size=5)
 
         # subscriber
-        sub_baseSpaceCmdVel = rospy.Subscriber('/rosi/propulsion/space/cmd_vel', Vector3ArrayStamped, self.cllbck_spaceCmdVel)
+        #sub_baseSpaceCmdVel = rospy.Subscriber('/rosi/propulsion/space/cmd_vel', Vector3ArrayStamped, self.cllbck_spaceCmdVel)
+        sub_cntctPnt = rospy.Subscriber('/rosi/model/contact_point_wrt_base', Vector3ArrayStamped, self.cllbck_cntctPnt)
+        sub_baseCmdVel = rospy.Subscriber('/rosi/base/space/cmd_vel', TwistStamped, self.cllbck_baseCmdVel)
         sub_flpTouchState = rospy.Subscriber('/rosi/flippers/status/touching_ground', Int8ArrayStamped, self.cllbck_flpTouchState)
         sub_cntctPlaneNVec = rospy.Subscriber('/rosi/model/contact_plane_normal_vec', Vector3Stamped, self.cllbck_cntctPlaneNVec)
 
@@ -77,14 +80,30 @@ class NodeClass():
             if self.ns.getNodeStatus()['active']:
                 
                 # only runs if a valid flippers touch status message has been received
-                if self.msg_v_Pi_V is not None and self.msg_flpTouchStatus is not None and self.msg_n_cp is not None:
+                if self.msg_baseCmdVel is not None and self.msg_flpTouchStatus is not None and self.msg_n_cp is not None and self.msg_cntctPnt is not None:
+
+                    # extracts contact points
+                    p_R_cp_l = [np.array([v.x, v.y, v.z]).reshape(3,1) for v in self.msg_cntctPnt.vec]
+
+                    # creates the input velocity command vector
+                    vl_R_input = np.array([self.msg_baseCmdVel.twist.linear.x, self.msg_baseCmdVel.twist.angular.z]).reshape(2,1)
+
+                    # computes the maneuvering jacobian
+                    J_mnvx  = compute_J_mnv_dagger(p_R_cp_l)
+
+                    # computing contact point frame velocity for attaining input baseCmdVel
+                    vl_Pi_l = np.dot(J_mnvx, vl_R_input)
+
+                    # mounting the contact point frames velocity vector 
+                    vl_cp_l = [ np.array([vl_Pi_l[2*i][0], vl_Pi_l[2*i+1][0], 0]).reshape(3,1) for i in range(int(len(vl_Pi_l)/2)) ]
 
                     # preparing the contact plane vector
                     n_cp = np.array([self.msg_n_cp.vector.x, self.msg_n_cp.vector.y, self.msg_n_cp.vector.z]).reshape(3,1)
-#
+
+
                     # iterates for all four locomotion mechanisms
                     jCmdVel_l = []
-                    for tchStatus, v_Pi_i in zip(self.msg_flpTouchStatus, self.msg_v_Pi_V.vec ):
+                    for tchStatus, v_Pi in zip(self.msg_flpTouchStatus, vl_cp_l ):
 
                         if tchStatus == 0: # flipper not touching the ground
                             # computes the wheel jacobian
@@ -93,10 +112,8 @@ class NodeClass():
                             # computes tracks jacobian
                             J_w = compute_J_traction(self.track_radius, n_cp)
 
-                        # mounting the input velocity vector for {Pi}
-                        v_Pi = np.array([v_Pi_i.x, v_Pi_i.y, v_Pi_i.z]).reshape(3,1)
+                        # computing the contact point (Pi) velocity vector norm
                         v_Pi_norm = np.linalg.norm(v_Pi)
-
 
                         if v_Pi_norm != 0: # only executes if a valid command has been received
 
@@ -134,10 +151,21 @@ class NodeClass():
         self.msg_flpTouchStatus = msg.data          
 
 
-    def cllbck_spaceCmdVel(self, msg):
+    def cllbck_cntctPnt(self, msg):
+        '''Callback message for received contact points'''
+        self.msg_cntctPnt = msg
+
+
+    """def cllbck_spaceCmdVel(self, msg):
         '''Callback for the traction propellant frame corrective vector'''
         # transforming input ROS msg into a python list of lists
-        self.msg_v_Pi_V = msg
+        self.msg_v_Pi_V = msg"""
+    
+
+    def cllbck_baseCmdVel(self, msg):
+        ''' Callback for the robot base {R} frame cmd vel input
+        '''
+        self.msg_baseCmdVel = msg
 
     def cllbck_cntctPlaneNVec(self, msg):
         '''Callback for the contact plane n vector'''
@@ -156,7 +184,7 @@ class NodeClass():
 
 
 if __name__ == '__main__':
-    node_name = 'traction_space_2_joint_cmd_vel'
+    node_name = 'base_space_2_traction_joint_cmd_vel'
     rospy.init_node(node_name, anonymous=True)
     rospy.loginfo('node '+node_name+' initiated.')
     try:
