@@ -9,14 +9,14 @@ from rosi_common.dq_tools import trAndOri2dq, rpy2quat
 
 # ROSI base Vicon marker pose wrt frame {R}
 p_marker_R_tr = [-0.14999997615814, 0.0, 0.18100000917912]
-p_marker_R_q = [0.70153158903122, 0.0, 0.0, -0.71263885498047]
+p_marker_R_q = [0.70153158903122, 0.0, 0.0, 0.71263885498047]
 
 
 # marker calibration correction offset
 p_corrOffset = {
-    'tr_z': -0.03475,
-    'rot_x': np.deg2rad(0.35),
-    'rot_y': np.deg2rad(1.37)
+    'tr_z': -0.0335,
+    'rot_x': np.deg2rad(-0.32),
+    'rot_y': np.deg2rad(0.35)
 }
 
 # ---> Preamble

@@ -34,7 +34,7 @@ class NodeClass():
 
         #----------------- SET-POINT ------------------------------
         # orientation
-        x_sp_ori_rpy = np.deg2rad([0, -10, 0]) # final vector is in radians RPY
+        x_sp_ori_rpy = np.deg2rad([0, 0, 0]) # final vector is in radians RPY
         
         # ground distance
         x_sp_tr = [0.0, 0.0, 0.3] # in meters
@@ -43,7 +43,7 @@ class NodeClass():
         #----------------- CONTROL GAINS ------------------------------
         #--> Translational gains
         # translation control gain per DOF
-        kp_tr_v = [0.0, 0.0, 0.0]
+        kp_tr_v = [0.0, 0.0, 1.5]
 
         # translation control gain per DOF
         ki_tr_v = [0.0, 0.0, 0.0]
@@ -51,7 +51,7 @@ class NodeClass():
 
         #--> Rotation gains
         # orientation controller Proportional gain per DOF
-        kp_rot_v = [0.0, 3.5, 0.0]
+        kp_rot_v = [2.4, 3.0, 0.0]
 
         # orientation controller Integrative gain per DOF
         ki_rot_v = [0.0, 0.0, 0.0] 
@@ -64,6 +64,7 @@ class NodeClass():
 
         # mu function gain
         self.muf_kmu_l = 4*[0.3]
+
 
 
         #------ Mu function for the Chassis ground height optimization function
@@ -116,7 +117,7 @@ class NodeClass():
         }
 
         # default control type
-        self.ctrlType_curr = self.chassisCtrlType['articulation']
+        self.ctrlType_curr = self.chassisCtrlType['orientation']
 
         # for storing joints and w function last values
         self.last_jointPos = None
@@ -243,7 +244,7 @@ class NodeClass():
 
                     # creating a orientation quaternion without the yaw component
                     rpy_imu = quat2rpy(q_imu)
-                    x_o_R_q = rpy2quat([rpy_imu[0], rpy_imu[1], 0])
+                    x_o_R_q = np.quaternion(*rpy2quat([rpy_imu[0], rpy_imu[1], 0]) )
 
                     # defining the articulation pose state
                     x_a_R_dq = trAndOri2dq([0, 0, self.msg_grndDist.vec[0].z], x_o_R_q, 'trfirst')
@@ -305,14 +306,6 @@ class NodeClass():
                         #--> Error
                         # computing the pose error
                         e_a_R_dq = self.x_sp_dq.conj() * x_a_R_dq
-
-
-
-
-
-
-
-
 
 
                         #--> Control signal
@@ -443,7 +436,7 @@ class NodeClass():
 
             # defining the control signal vector
             u_dq_aux = u_dq.vec8().tolist()
-            u = np.array([-1*u_dq_aux[7], u_dq_aux[1], u_dq_aux[2]]).reshape(3,1)
+            u = np.array([u_dq_aux[7], u_dq_aux[1], u_dq_aux[2]]).reshape(3,1)
 
         else:
             rospy.logerr('[%s] orientation control signal generation type not recognized')

@@ -33,15 +33,42 @@ class NodeClass():
         ##-------------- Controller parameters -------------------------
 
         # desired control type
-        self.ctrlTypeDes = "articulation" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
+        self.ctrlTypeDes = "orientationNullSpace_FlpJnt" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
 
         # experiment type
         self.p_ExperimentType = 'step' # possible values are: 'step', 'circle'
 
 
+        ##------- Controller gains ---------------
+        # ---> translation gains
+        # translation Proportional control gain per DOF
+        self.kp_tr_v = [0.0, 0.0, 0.0]
+
+        # translational Integrator control gain per DOF
+        self.ki_tr_v = [0.0, 0.0, 0.0]
+
+
+        # ---> Rotation gains
+        # orientation Proportional controller gain per DOF
+        self.kp_rot_v = [0.0, 0.0, 0.0]
+
+        # orientation Integrator control gain per DOF
+        self.ki_rot_v = [0.0, 0.0, 0.0]       
+
+        
+        #---> Mu functions gains
+        # flipper Mu function gain
+        self.muF_kmu = 0.1
+
+        # ground distance Mu function gain
+        self.muG_kmu = 0.85
+        
+
+
+
         ##------- Home set-points -------------------
         # position home set-point
-        self.sp_tr_home = [0.0, 0.0, 0.3]
+        self.sp_tr_home = [0.0, 0.0, 0.31]
 
         # orientation set-point
         self.sp_ori_home = np.deg2rad([0, 0, 0])
@@ -53,30 +80,31 @@ class NodeClass():
         self.sp_muG_home = 0.33 # in [m]
 
 
-        
-        ##------- STEP EXPERIMENT PARAMETERS --- Step Experiment Pose parameters
 
+
+
+        ##------- STEP EXPERIMENT PARAMETERS --- Step Experiment Pose parameters
         # dof to evaluate the error
-        self.errorMit_dof = 'rot_y'  # possible values are: 'tr_z', 'rot_x', 'rot_y'
+        self.errorMit_dof = 'tr_z'  # possible values are: 'tr_z', 'rot_x', 'rot_y'
 
         # In the step experiment, the set-points sequency are home -> p1 -> p2 -> p1 -> home
         # The controller will go first to 'p1', then to 'p2', and finally returning to 'p1'
         # position set-point
         self.sp_tr = { # in [m]
-            'p1': [0.0, 0.0, 0.3],
-            'p2': [0.0, 0.0, 0.3]
+            'p1': [0.0, 0.0, 0.21],
+            'p2': [0.0, 0.0, 0.41]
         }
 
         # orientation set-point
         self.sp_ori = { # rpy in [rad]
-            'p1': np.deg2rad([0, -10, 0]),
-            'p2': np.deg2rad([0, 10, 0])
+            'p1': np.deg2rad([0, 0, 0]),
+            'p2': np.deg2rad([0, 0, 0])
         }
 
         # flipper joints mu function set-point
         self.sp_muF = {
-            'p1': np.deg2rad(130),
-            'p2': np.deg2rad(130)
+            'p1': np.deg2rad(120),
+            'p2': np.deg2rad(140)
         }
 
         # ground distance mu function set-point
@@ -86,39 +114,10 @@ class NodeClass():
         }
 
         # time for wait within error range
-        self.p_timeWithin = 5 #[s]
+        self.p_timeWithin = 10 #[s]
 
         # time for wait outside error range
         self.p_timeOutside = 10 #[s]
-
-
-
-        ##------- Controller gains ---------------
-
-        # ---> translation gains
-        # translation Proportional control gain per DOF
-        self.kp_tr_v = [0.0, 0.0, 0.0]
-
-        # translational Integrator control gain per DOF
-        self.ki_tr_v = [0.0, 0.0, 0.0]
-
-
-        # ---> Rotation gains
-        # orientation Proportional controller gain per DOF
-        self.kp_rot_v = [0.0, 3.5, 0.0]
-
-        # orientation Integrator control gain per DOF
-        self.ki_rot_v = [0.0, 0.0, 0.0]       
-
-        
-
-        #---> Mu functions gains
-        # flipper Mu function gain
-        self.muF_kmu = 0.25
-
-        # ground distance Mu function gain
-        self.muG_kmu = 0.85
-
 
 
 
@@ -145,7 +144,7 @@ class NodeClass():
         self.p_flagSavingPic = True
 
         # path to the folder where results are going to be stored
-        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/tuning/rot_y'
+        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/tuning/mu_flpJnt'
 
         # axes labels resolution
         self.p_yLabelRes = 12
