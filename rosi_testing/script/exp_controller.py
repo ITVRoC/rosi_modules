@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 '''Node for performing the controller evaluation experiment
 
-rosbag record /chassis_control/pose_current /chassis_control/pose_sp /chassis_control/pose_error /chassis_control/gain_dq /rosi/flippers/space/cmd_v_z/leveler /rosi/propulsion/space/cmd_vel /rosi/flippers/space/cmd_v_z /rosi/flippers/joint/cmd_vel/leveler /rosi/flippers/joint/cmd_vel/touch_granter /rosi/flippers/joint/cmd_vel/sum /rosi/rosi_controller/input /rosi/traction/joint/cmd_vel/navigation /rosi/base/space/cmd_vel /rosi/base/space/cmd_vel/autnav /rosi/base/space/cmd_vel/joy /joy /mti/sensor/imu /sensor/imu_corrected /rosi/rosi_controller/joint_state /rosi/model/contact_point_wrt_pi /rosi/model/contact_point_wrt_base /rosi/model/grav_vec_wrt_frame_r /rosi/model/flipper_tip_wrt_pi /rosi/model/base_ground_distance /rosi/model/contact_plane_normal_vec /vicon/rosi_base/rosi_base
+--> Para gravar com as vicon
+rosbag record /vicon/rosi_base/rosi_base /rosi/rosi_controller/joint_state /sensor/imu_corrected /joy /rosi/base/space/cmd_vel /chassis_control/gain_dq /rosi/rosi_controller/input /rosi/controller/req_cmd /rosi/model/contact_point_wrt_base /rosi/model/grav_vec_wrt_frame_r /rosi/model/base_ground_distance /rosi/model/contact_plane_normal_vec /chassis_control/pose_current /chassis_control/pose_sp /chassis_control/pose_error /chassis_control/sp_dq /rosi/flippers/space/cmd_v_z/leveler /rosi/flippers/space/cmd_vel /rosi/flippers/space/cmd_v_z /rosi/flippers/joint/cmd_vel/leveler /rosi/flippers/status/touching_ground /rosi/flippers/joint/cmd_vel/touch_granter /rosi/flippers/joint/cmd_vel/sum /rosi/flippers/status/safety/max_pos_lock /rosi/traction/joint/cmd_vel/navigation /rosi/traction/joint/cmd_vel/compensator
+
+--> Para gravar sem as vicon
+rosbag record /rosi/rosi_controller/joint_state /sensor/imu_corrected /joy /rosi/base/space/cmd_vel /rosi/rosi_controller/input /chassis_control/gain_dq /rosi/controller/req_cmd /rosi/model/contact_point_wrt_base /rosi/model/grav_vec_wrt_frame_r /rosi/model/base_ground_distance /rosi/model/contact_plane_normal_vec /chassis_control/pose_current /chassis_control/pose_sp /chassis_control/pose_error /chassis_control/sp_dq /rosi/flippers/space/cmd_v_z/leveler /rosi/flippers/space/cmd_vel /rosi/flippers/space/cmd_v_z /rosi/flippers/joint/cmd_vel/leveler /rosi/flippers/status/touching_ground /rosi/flippers/joint/cmd_vel/touch_granter /rosi/flippers/joint/cmd_vel/sum /rosi/flippers/status/safety/max_pos_lock /rosi/traction/joint/cmd_vel/navigation /rosi/traction/joint/cmd_vel/compensator
 
 '''
 import rospy
@@ -15,7 +19,6 @@ import csv
 
 from rosi_common.dq_tools import DualQuaternionStampedMsg2dq, dq2rpy, dqExtractTransV3, quat2rpy, trAndOri2dq, rpy2dq
 from rosi_common.vicon_tools import getBasePoseFromMarkerDq
-
 
 from rosi_common.msg import DualQuaternionStamped
 from geometry_msgs.msg import TransformStamped
@@ -33,16 +36,16 @@ class NodeClass():
         ##-------------- Controller parameters -------------------------
 
         # desired control type
-        self.ctrlTypeDes = "orientationNullSpace_FlpJnt" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
+        self.ctrlTypeDes = "articulation" # possible values are 'orientation', 'orientationNullSpace_FlpJnt', 'orientationNullSpace_GrndHght', 'articulation'
 
         # experiment type
-        self.p_ExperimentType = 'step' # possible values are: 'step', 'circle'
+        self.p_ExperimentType = 'circle' # possible values are: 'step', 'circle'
 
 
         ##------- Controller gains ---------------
         # ---> translation gains
         # translation Proportional control gain per DOF
-        self.kp_tr_v = [0.0, 0.0, 0.0]
+        self.kp_tr_v = [0.0, 0.0, 1.5]
 
         # translational Integrator control gain per DOF
         self.ki_tr_v = [0.0, 0.0, 0.0]
@@ -50,7 +53,7 @@ class NodeClass():
 
         # ---> Rotation gains
         # orientation Proportional controller gain per DOF
-        self.kp_rot_v = [0.0, 0.0, 0.0]
+        self.kp_rot_v = [2.4, 2.2, 0.0]
 
         # orientation Integrator control gain per DOF
         self.ki_rot_v = [0.0, 0.0, 0.0]       
@@ -58,11 +61,12 @@ class NodeClass():
         
         #---> Mu functions gains
         # flipper Mu function gain
-        self.muF_kmu = 0.1
+        self.muF_kmu = 0.26
 
         # ground distance Mu function gain
-        self.muG_kmu = 0.85
+        self.muG_kmu = 0.9
         
+
 
 
 
@@ -77,7 +81,7 @@ class NodeClass():
         self.sp_muF_home = np.deg2rad(130)
 
         # ground distance mu function set-point
-        self.sp_muG_home = 0.33 # in [m]
+        self.sp_muG_home = 0.31 # in [m]
 
 
 
@@ -91,8 +95,8 @@ class NodeClass():
         # The controller will go first to 'p1', then to 'p2', and finally returning to 'p1'
         # position set-point
         self.sp_tr = { # in [m]
-            'p1': [0.0, 0.0, 0.21],
-            'p2': [0.0, 0.0, 0.41]
+            'p1': [0.0, 0.0, 0.22],
+            'p2': [0.0, 0.0, 0.38]
         }
 
         # orientation set-point
@@ -103,18 +107,18 @@ class NodeClass():
 
         # flipper joints mu function set-point
         self.sp_muF = {
-            'p1': np.deg2rad(120),
-            'p2': np.deg2rad(140)
+            'p1': np.deg2rad(130),
+            'p2': np.deg2rad(130)
         }
 
         # ground distance mu function set-point
         self.sp_muG = {
-            'p1': 0.33,
-            'p2': 0.33
+            'p1': 0.31,
+            'p2': 0.31
         }
 
         # time for wait within error range
-        self.p_timeWithin = 10 #[s]
+        self.p_timeWithin = 5 #[s]
 
         # time for wait outside error range
         self.p_timeOutside = 10 #[s]
@@ -141,10 +145,10 @@ class NodeClass():
 
         #------------------ Saving/Plotting parameters -------------------
         # flag for saving or not the plottings
-        self.p_flagSavingPic = True
+        self.p_flagSavingPic = False
 
         # path to the folder where results are going to be stored
-        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/tuning/mu_flpJnt'
+        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/ctrl_validation'
 
         # axes labels resolution
         self.p_yLabelRes = 12
@@ -257,6 +261,7 @@ class NodeClass():
             # only runs if a valid message has been received
             if self.ctrl_basePoseError is not None and self.gt_basePose_msg  is not None and self.ctrl_basePose_msg is not None:
                 
+
                 # setting the controller to the desired type
                 self.setCtrlType(self.chassisCtrlType[self.ctrlTypeDes])
 
@@ -339,7 +344,7 @@ class NodeClass():
         
         # parameters
         n_points = 100
-        circAmplitude = np.deg2rad(10)       # in [rad]
+        circAmplitude = np.deg2rad(15)       # in [rad]
         heightAmplitude = 0.0               # in [m] 
         timeNextPoint = rospy.Duration.from_sec(0.1)                  # in [s]
 

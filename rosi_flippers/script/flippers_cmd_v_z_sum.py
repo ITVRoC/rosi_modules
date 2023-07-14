@@ -40,7 +40,7 @@ class NodeClass():
         self.pub_cmdVel_cmdVelVzPi = rospy.Publisher('/rosi/flippers/space/cmd_v_z', Vector3ArrayStamped, queue_size=5)
 
         # subscribers
-        sub_cmdVel_cmdVelVzPi_joy = rospy.Subscriber('/rosi/propulsion/space/cmd_vel', Vector3ArrayStamped, self.cllbck_cmdVelVzPi_joy)
+        sub_cmdVel_cmdVelVzPi_joy = rospy.Subscriber('/rosi/flippers/space/cmd_vel', Vector3ArrayStamped, self.cllbck_cmdVelVzPi_joy)
         sub_cmdVel_cmdVelVzPi_leveler = rospy.Subscriber('/rosi/flippers/space/cmd_v_z/leveler', Vector3ArrayStamped, self.cllbck_cmdVelVzPi_leveler)
 
 

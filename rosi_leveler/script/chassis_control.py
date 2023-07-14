@@ -51,7 +51,7 @@ class NodeClass():
 
         #--> Rotation gains
         # orientation controller Proportional gain per DOF
-        kp_rot_v = [2.4, 3.0, 0.0]
+        kp_rot_v = [2.4, 2.2, 0.0]
 
         # orientation controller Integrative gain per DOF
         ki_rot_v = [0.0, 0.0, 0.0] 
@@ -63,7 +63,7 @@ class NodeClass():
         self.muf_flpJointPosSp_l = 4*[np.deg2rad(130)]
 
         # mu function gain
-        self.muf_kmu_l = 4*[0.3]
+        self.muf_kmu_l = 4*[0.26]
 
 
 
@@ -72,7 +72,7 @@ class NodeClass():
         self.mug_grndDstncSp_l = 0.85
         
         # mu function gain 
-        self.mug_kmu_l = 0.25
+        self.mug_kmu_l = 0.9
     
 
 

@@ -30,7 +30,7 @@ class NodeClass():
 
         ##=== ROS interfaces
         # publishers
-        self.pub_propCmdVel = rospy.Publisher('/rosi/propulsion/space/cmd_vel', Vector3ArrayStamped, queue_size=5)
+        self.pub_propCmdVel = rospy.Publisher('/rosi/flippers/space/cmd_vel', Vector3ArrayStamped, queue_size=5)
 
         # subscribers
         sub_baseCmdVel = rospy.Subscriber('/rosi/base/space/cmd_vel', TwistStamped, self.cllbck_baseCmdVel)
