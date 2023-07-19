@@ -14,9 +14,9 @@ p_marker_R_q = [0.70153158903122, 0.0, 0.0, 0.71263885498047]
 
 # marker calibration correction offset
 p_corrOffset = {
-    'tr_z': -0.0335,
-    'rot_x': np.deg2rad(-0.32),
-    'rot_y': np.deg2rad(0.35)
+    'tr_z': 0.31015 - 0.3474,
+    'rot_x': np.deg2rad(0.349 - 0.15),
+    'rot_y': np.deg2rad(0.021 - 0.745)
 }
 
 # ---> Preamble

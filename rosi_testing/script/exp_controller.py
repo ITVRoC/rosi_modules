@@ -42,6 +42,7 @@ class NodeClass():
         self.p_ExperimentType = 'circle' # possible values are: 'step', 'circle'
 
 
+
         ##------- Controller gains ---------------
         # ---> translation gains
         # translation Proportional control gain per DOF
@@ -68,8 +69,6 @@ class NodeClass():
         
 
 
-
-
         ##------- Home set-points -------------------
         # position home set-point
         self.sp_tr_home = [0.0, 0.0, 0.31]
@@ -85,18 +84,16 @@ class NodeClass():
 
 
 
-
-
         ##------- STEP EXPERIMENT PARAMETERS --- Step Experiment Pose parameters
         # dof to evaluate the error
-        self.errorMit_dof = 'tr_z'  # possible values are: 'tr_z', 'rot_x', 'rot_y'
+        self.errorMit_dof = 'rot_y'  # possible values are: 'tr_z', 'rot_x', 'rot_y'
 
         # In the step experiment, the set-points sequency are home -> p1 -> p2 -> p1 -> home
         # The controller will go first to 'p1', then to 'p2', and finally returning to 'p1'
         # position set-point
         self.sp_tr = { # in [m]
-            'p1': [0.0, 0.0, 0.22],
-            'p2': [0.0, 0.0, 0.38]
+            'p1': [0.0, 0.0, 0.31],
+            'p2': [0.0, 0.0, 0.31]
         }
 
         # orientation set-point
@@ -145,10 +142,10 @@ class NodeClass():
 
         #------------------ Saving/Plotting parameters -------------------
         # flag for saving or not the plottings
-        self.p_flagSavingPic = False
+        self.p_flagSavingPic = True
 
         # path to the folder where results are going to be stored
-        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/ctrl_validation'
+        self.p_expFolderPath = '/home/filipe/pCloud_sync/DOC/DOC/pratico/experimentos-estudos/2023-07-03_controlLabVicon/test'
 
         # axes labels resolution
         self.p_yLabelRes = 12
@@ -343,10 +340,10 @@ class NodeClass():
     def expCircle(self, node_rate_sleep):
         
         # parameters
-        n_points = 100
-        circAmplitude = np.deg2rad(15)       # in [rad]
+        n_points = 150
+        circAmplitude = np.deg2rad(10)       # in [rad]
         heightAmplitude = 0.0               # in [m] 
-        timeNextPoint = rospy.Duration.from_sec(0.1)                  # in [s]
+        timeNextPoint = rospy.Duration.from_sec(0.5)                  # in [s]
 
         # creates the circle set-point for each dof
         iter_l = np.linspace(0, 2*np.pi, n_points)
@@ -499,10 +496,13 @@ class NodeClass():
         # logs received data
         if self.flag_logging:
 
+            # getting ros time
+            ros_time = rospy.get_rostime()
+
             # saving first logged time
             if self.flag_logFirstRun['vicon']:
                 self.flag_logFirstRun['vicon'] = False
-                self.loggingTimeIni['vicon'] = msg.header.stamp
+                self.loggingTimeIni['vicon'] = ros_time
             
             # creates a dq from received values
             dq = trAndOri2dq([msg.transform.translation.x, msg.transform.translation.y, msg.transform.translation.z],
@@ -517,7 +517,7 @@ class NodeClass():
             rpy = dq2rpy(dq)
 
             # logs variables
-            self.log['vicon_time'].append(  (msg.header.stamp - self.loggingTimeIni['vicon']).to_sec()  )
+            self.log['vicon_time'].append(  (ros_time - self.loggingTimeIni['vicon']).to_sec()  )
             self.log['vicon_rot_x'].append(rpy[0])
             self.log['vicon_rot_y'].append(rpy[1])
             self.log['vicon_tr_z'].append(tr[2][0])
@@ -530,10 +530,13 @@ class NodeClass():
         # logs received data
         if self.flag_logging:
 
+            # getting ros time
+            ros_time = rospy.get_rostime()
+
             # saving first logged time
             if self.flag_logFirstRun['model']:
                 self.flag_logFirstRun['model'] = False
-                self.loggingTimeIni['model'] = msg.header.stamp
+                self.loggingTimeIni['model'] = ros_time
             
             # creating a DQ element with received msg
             dq = DQ(msg.wp, msg.xp, msg.yp, msg.zp, msg.wd, msg.xd, msg.yd, msg.zd)
@@ -543,7 +546,7 @@ class NodeClass():
             rpy = dq2rpy(dq)
 
             # logs variables
-            self.log['model_time'].append(  (msg.header.stamp - self.loggingTimeIni['model']).to_sec()  )
+            self.log['model_time'].append(  (ros_time - self.loggingTimeIni['model']).to_sec()  )
             self.log['model_rot_x'].append(rpy[0])
             self.log['model_rot_y'].append(rpy[1])
             self.log['model_tr_z'].append(tr[2][0])
@@ -553,13 +556,17 @@ class NodeClass():
         '''Callback for the controller pose set-point'''
         self.ctrl_basePoseSp_msg = msg
 
+        # getting ros time
+        ros_time = rospy.get_rostime()
+
         # logs received data
         if self.flag_logging:
 
+            
             # saving first logged time
             if self.flag_logFirstRun['sp']:
                 self.flag_logFirstRun['sp'] = False
-                self.loggingTimeIni['sp'] = msg.header.stamp
+                self.loggingTimeIni['sp'] = ros_time
 
             # creating a DQ element with received msg
             dq = DQ(msg.wp, msg.xp, msg.yp, msg.zp, msg.wd, msg.xd, msg.yd, msg.zd)
@@ -569,7 +576,7 @@ class NodeClass():
             rpy = dq2rpy(dq)
 
             # logs variables
-            self.log['sp_time'].append(  (msg.header.stamp - self.loggingTimeIni['sp']).to_sec()  )
+            self.log['sp_time'].append(  (ros_time - self.loggingTimeIni['sp']).to_sec()  )
             self.log['sp_rot_x'].append(rpy[0])
             self.log['sp_rot_y'].append(rpy[1])
             self.log['sp_tr_z'].append(tr[2][0])
@@ -644,7 +651,7 @@ class NodeClass():
         timeMax = rospy.Duration(timeMax)
 
         # ini time of waiting
-        time_ini = self.ctrl_basePoseError.header.stamp
+        time_ini = rospy.get_rostime()
 
         # initializing variables
         time_windowIni = time_ini
@@ -652,7 +659,7 @@ class NodeClass():
         while not rospy.is_shutdown():
                 
             # current time
-            time_curr = self.ctrl_basePoseError.header.stamp
+            time_curr = rospy.get_rostime()
 
             # evaluating if the max time of waiting has been achieved
             if time_curr - time_ini > timeMax:
